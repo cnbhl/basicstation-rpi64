@@ -30,17 +30,63 @@ if [ -f "$CUPS_DIR/cups.key" ]; then
 fi
 
 # Step 1: Build the station binary
-echo -e "${GREEN}Step 1: Building the station binary...${NC}"
-echo "This may take a few minutes on first build."
+echo -e "${GREEN}Step 1: Build the station binary${NC}"
+echo ""
+echo "This step will compile the Basic Station software for the SX1302 Corecell platform."
+echo ""
+echo "The build process will:"
+echo "  - Download and compile dependencies (mbedTLS, libloragw)"
+echo "  - Compile the Basic Station source code"
+echo "  - Create the executable at: build-corecell-std/bin/station"
 echo ""
 
-cd "$SCRIPT_DIR"
-if make platform=corecell variant=std; then
-    echo -e "${GREEN}Build completed successfully.${NC}"
+# Check if binary already exists
+if [ -f "$SCRIPT_DIR/build-corecell-std/bin/station" ]; then
+    echo -e "${YELLOW}Note: A station binary already exists.${NC}"
+    read -p "Do you want to rebuild? (y/N): " rebuild
+    if [ "$rebuild" != "y" ] && [ "$rebuild" != "Y" ]; then
+        echo -e "${GREEN}Skipping build, using existing binary.${NC}"
+        echo ""
+    else
+        echo ""
+        read -p "Start the build process now? (Y/n): " start_build
+        if [ "$start_build" = "n" ] || [ "$start_build" = "N" ]; then
+            echo "Setup cancelled. You can build manually with:"
+            echo "  make platform=corecell variant=std"
+            exit 0
+        fi
+        echo ""
+        echo -e "${YELLOW}Building... This may take several minutes on first build.${NC}"
+        echo ""
+        cd "$SCRIPT_DIR"
+        if make platform=corecell variant=std; then
+            echo ""
+            echo -e "${GREEN}Build completed successfully.${NC}"
+        else
+            echo -e "${RED}Build failed. Please check the error messages above.${NC}"
+            echo "You can try building manually with: make platform=corecell variant=std"
+            exit 1
+        fi
+    fi
 else
-    echo -e "${RED}Build failed. Please check the error messages above.${NC}"
-    echo "You can try building manually with: make platform=corecell variant=std"
-    exit 1
+    read -p "Start the build process now? (Y/n): " start_build
+    if [ "$start_build" = "n" ] || [ "$start_build" = "N" ]; then
+        echo "Setup cancelled. You can build manually with:"
+        echo "  make platform=corecell variant=std"
+        exit 0
+    fi
+    echo ""
+    echo -e "${YELLOW}Building... This may take several minutes on first build.${NC}"
+    echo ""
+    cd "$SCRIPT_DIR"
+    if make platform=corecell variant=std; then
+        echo ""
+        echo -e "${GREEN}Build completed successfully.${NC}"
+    else
+        echo -e "${RED}Build failed. Please check the error messages above.${NC}"
+        echo "You can try building manually with: make platform=corecell variant=std"
+        exit 1
+    fi
 fi
 echo ""
 
