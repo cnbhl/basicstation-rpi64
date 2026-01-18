@@ -6,325 +6,351 @@
 
 set -e
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+#######################################
+# Constants
+#######################################
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CUPS_DIR="$SCRIPT_DIR/examples/corecell/cups-ttn"
+readonly SCRIPT_DIR
+readonly CUPS_DIR="$SCRIPT_DIR/examples/corecell/cups-ttn"
+readonly STATION_BINARY="$SCRIPT_DIR/build-corecell-std/bin/station"
+readonly CHIP_ID_TOOL="$SCRIPT_DIR/tools/chip_id/chip_id"
+readonly CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
 
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN} LoRa Basic Station Setup for TTN${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
+#######################################
+# Utility Functions
+#######################################
 
-# Check if credentials already exist
-if [ -f "$CUPS_DIR/cups.key" ]; then
-    echo -e "${YELLOW}Warning: Credentials already exist in $CUPS_DIR${NC}"
-    read -p "Do you want to overwrite them? (y/N): " overwrite
-    if [ "$overwrite" != "y" ] && [ "$overwrite" != "Y" ]; then
-        echo "Setup cancelled."
-        exit 0
-    fi
-fi
+print_header() {
+    echo -e "${GREEN}$1${NC}"
+}
 
-# Step 1: Build the station binary
-echo -e "${GREEN}Step 1: Build the station binary${NC}"
-echo ""
-echo "This step will compile the Basic Station software for the SX1302 Corecell platform."
-echo ""
-echo "The build process will:"
-echo "  - Download and compile dependencies (mbedTLS, libloragw)"
-echo "  - Compile the Basic Station source code"
-echo "  - Create the executable at: build-corecell-std/bin/station"
-echo ""
+print_success() {
+    echo -e "${GREEN}$1${NC}"
+}
 
-# Check if binary already exists
-if [ -f "$SCRIPT_DIR/build-corecell-std/bin/station" ]; then
-    echo -e "${YELLOW}Note: A station binary already exists.${NC}"
-    read -p "Do you want to rebuild? (y/N): " rebuild
-    if [ "$rebuild" != "y" ] && [ "$rebuild" != "Y" ]; then
-        echo -e "${GREEN}Skipping build, using existing binary.${NC}"
-        echo ""
+print_warning() {
+    echo -e "${YELLOW}$1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}$1${NC}"
+}
+
+print_banner() {
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN} $1${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+}
+
+# Prompt for yes/no confirmation
+# Usage: confirm "Question?" && do_something
+# Returns 0 (true) for y/Y, 1 (false) for n/N or empty
+confirm() {
+    local prompt="$1"
+    local default="${2:-n}"
+    local response
+
+    if [ "$default" = "y" ]; then
+        read -rp "$prompt (Y/n): " response
+        [ "$response" != "n" ] && [ "$response" != "N" ]
     else
-        echo ""
-        read -p "Start the build process now? (Y/n): " start_build
-        if [ "$start_build" = "n" ] || [ "$start_build" = "N" ]; then
-            echo "Setup cancelled. You can build manually with:"
-            echo "  make platform=corecell variant=std"
+        read -rp "$prompt (y/N): " response
+        [ "$response" = "y" ] || [ "$response" = "Y" ]
+    fi
+}
+
+# Validate 16-character hex string
+validate_eui() {
+    local eui="$1"
+    [[ "$eui" =~ ^[0-9A-Fa-f]{16}$ ]]
+}
+
+#######################################
+# Step Functions
+#######################################
+
+step_check_existing_credentials() {
+    if [ -f "$CUPS_DIR/cups.key" ]; then
+        print_warning "Warning: Credentials already exist in $CUPS_DIR"
+        if ! confirm "Do you want to overwrite them?"; then
+            echo "Setup cancelled."
             exit 0
         fi
-        echo ""
-        echo -e "${YELLOW}Building... This may take several minutes on first build.${NC}"
-        echo ""
-        cd "$SCRIPT_DIR"
-        if make platform=corecell variant=std; then
+    fi
+}
+
+step_build_station() {
+    print_header "Step 1: Build the station binary"
+    echo ""
+    echo "This step will compile the Basic Station software for the SX1302 Corecell platform."
+    echo ""
+    echo "The build process will:"
+    echo "  - Download and compile dependencies (mbedTLS, libloragw)"
+    echo "  - Compile the Basic Station source code"
+    echo "  - Create the executable at: build-corecell-std/bin/station"
+    echo ""
+
+    if [ -f "$STATION_BINARY" ]; then
+        print_warning "Note: A station binary already exists."
+        if ! confirm "Do you want to rebuild?"; then
+            print_success "Skipping build, using existing binary."
             echo ""
-            echo -e "${GREEN}Build completed successfully.${NC}"
-        else
-            echo -e "${RED}Build failed. Please check the error messages above.${NC}"
-            echo "You can try building manually with: make platform=corecell variant=std"
-            exit 1
+            return 0
         fi
     fi
-else
-    read -p "Start the build process now? (Y/n): " start_build
-    if [ "$start_build" = "n" ] || [ "$start_build" = "N" ]; then
+
+    if ! confirm "Start the build process now?" "y"; then
         echo "Setup cancelled. You can build manually with:"
         echo "  make platform=corecell variant=std"
         exit 0
     fi
+
     echo ""
-    echo -e "${YELLOW}Building... This may take several minutes on first build.${NC}"
+    print_warning "Building... This may take several minutes on first build."
     echo ""
+
     cd "$SCRIPT_DIR"
     if make platform=corecell variant=std; then
         echo ""
-        echo -e "${GREEN}Build completed successfully.${NC}"
+        print_success "Build completed successfully."
     else
-        echo -e "${RED}Build failed. Please check the error messages above.${NC}"
+        print_error "Build failed. Please check the error messages above."
         echo "You can try building manually with: make platform=corecell variant=std"
         exit 1
     fi
-fi
-echo ""
+    echo ""
+}
 
-# Step 2: Select TTN Region
-echo -e "${GREEN}Step 2: Select your TTN region${NC}"
-echo "  1) EU1  - Europe (eu1.cloud.thethings.network)"
-echo "  2) NAM1 - North America (nam1.cloud.thethings.network)"
-echo "  3) AU1  - Australia (au1.cloud.thethings.network)"
-echo ""
-read -p "Enter region number [1-3]: " region_choice
+step_select_region() {
+    print_header "Step 2: Select your TTN region"
+    echo "  1) EU1  - Europe (eu1.cloud.thethings.network)"
+    echo "  2) NAM1 - North America (nam1.cloud.thethings.network)"
+    echo "  3) AU1  - Australia (au1.cloud.thethings.network)"
+    echo ""
+    read -rp "Enter region number [1-3]: " region_choice
 
-case $region_choice in
-    1) TTN_REGION="eu1" ;;
-    2) TTN_REGION="nam1" ;;
-    3) TTN_REGION="au1" ;;
-    *)
-        echo -e "${RED}Invalid selection. Defaulting to EU1.${NC}"
-        TTN_REGION="eu1"
-        ;;
-esac
+    case $region_choice in
+        1) TTN_REGION="eu1" ;;
+        2) TTN_REGION="nam1" ;;
+        3) TTN_REGION="au1" ;;
+        *)
+            print_error "Invalid selection. Defaulting to EU1."
+            TTN_REGION="eu1"
+            ;;
+    esac
 
-CUPS_URI="https://${TTN_REGION}.cloud.thethings.network:443"
-echo -e "Selected: ${GREEN}$CUPS_URI${NC}"
-echo ""
+    CUPS_URI="https://${TTN_REGION}.cloud.thethings.network:443"
+    echo -e "Selected: ${GREEN}$CUPS_URI${NC}"
+    echo ""
+}
 
-# Step 3: Gateway EUI (auto-detect from SX1302 chip)
-echo -e "${GREEN}Step 3: Gateway EUI Detection${NC}"
-echo ""
-echo "The Gateway EUI is a unique 64-bit identifier for your gateway."
-echo "This EUI is required to register your gateway on The Things Network."
-echo ""
-echo "Attempting to read EUI from SX1302 chip..."
-echo ""
+step_detect_eui() {
+    local detected_eui=""
 
-CHIP_ID_TOOL="$SCRIPT_DIR/tools/chip_id/chip_id"
-CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
-DETECTED_EUI=""
+    print_header "Step 3: Gateway EUI Detection"
+    echo ""
+    echo "The Gateway EUI is a unique 64-bit identifier for your gateway."
+    echo "This EUI is required to register your gateway on The Things Network."
+    echo ""
+    echo "Attempting to read EUI from SX1302 chip..."
+    echo ""
 
-if [ -x "$CHIP_ID_TOOL" ]; then
-    # Run chip_id to get the concentrator EUI
-    cd "$CHIP_ID_DIR"
-    CHIP_OUTPUT=$(sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
-    cd "$SCRIPT_DIR"
+    if [ -x "$CHIP_ID_TOOL" ]; then
+        cd "$CHIP_ID_DIR"
+        local chip_output
+        chip_output=$(sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
+        cd "$SCRIPT_DIR"
 
-    # Extract EUI from output (format: "concentrator EUI: 0xAABBCCDDEEFF0011")
-    DETECTED_EUI=$(echo "$CHIP_OUTPUT" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]')
+        detected_eui=$(echo "$chip_output" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]')
 
-    if [ -n "$DETECTED_EUI" ] && [[ "$DETECTED_EUI" =~ ^[0-9A-F]{16}$ ]]; then
-        echo -e "Detected EUI from SX1302 chip: ${GREEN}$DETECTED_EUI${NC}"
-        echo ""
-        read -p "Use this EUI? (Y/n): " use_detected
-        if [ "$use_detected" = "n" ] || [ "$use_detected" = "N" ]; then
-            DETECTED_EUI=""
+        if [ -n "$detected_eui" ] && validate_eui "$detected_eui"; then
+            echo -e "Detected EUI from SX1302 chip: ${GREEN}$detected_eui${NC}"
+            echo ""
+            if confirm "Use this EUI?" "y"; then
+                GATEWAY_EUI="$detected_eui"
+                return 0
+            fi
+            detected_eui=""
+        else
+            print_warning "Could not auto-detect EUI from SX1302 chip."
         fi
     else
-        echo -e "${YELLOW}Could not auto-detect EUI from SX1302 chip.${NC}"
-        DETECTED_EUI=""
+        print_warning "chip_id tool not found at $CHIP_ID_TOOL"
+        echo "You can build it from sx1302_hal or enter the EUI manually."
     fi
-else
-    echo -e "${YELLOW}chip_id tool not found at $CHIP_ID_TOOL${NC}"
-    echo "You can build it from sx1302_hal or enter the EUI manually."
-fi
 
-if [ -n "$DETECTED_EUI" ]; then
-    GATEWAY_EUI="$DETECTED_EUI"
-else
     echo ""
     echo "Please enter your Gateway EUI manually."
     echo "This is a 16-character hex string (e.g., AABBCCDDEEFF0011)"
     echo "You can find this in your TTN Console under Gateway settings."
     echo ""
-    read -p "Gateway EUI: " GATEWAY_EUI
+    read -rp "Gateway EUI: " GATEWAY_EUI
 
-    # Validate Gateway EUI format
-    if ! [[ "$GATEWAY_EUI" =~ ^[0-9A-Fa-f]{16}$ ]]; then
-        echo -e "${RED}Warning: Gateway EUI should be 16 hex characters.${NC}"
-        read -p "Continue anyway? (y/N): " continue_anyway
-        if [ "$continue_anyway" != "y" ] && [ "$continue_anyway" != "Y" ]; then
+    if ! validate_eui "$GATEWAY_EUI"; then
+        print_warning "Warning: Gateway EUI should be 16 hex characters."
+        if ! confirm "Continue anyway?"; then
             echo "Setup cancelled."
             exit 1
         fi
     fi
 
-    # Convert to uppercase
     GATEWAY_EUI=$(echo "$GATEWAY_EUI" | tr '[:lower:]' '[:upper:]')
-fi
+}
 
-echo -e "Gateway EUI: ${GREEN}$GATEWAY_EUI${NC}"
-echo ""
-echo -e "${YELLOW}────────────────────────────────────────────────────────────────${NC}"
-echo -e "${YELLOW}IMPORTANT: Register this gateway in TTN Console before continuing${NC}"
-echo -e "${YELLOW}────────────────────────────────────────────────────────────────${NC}"
-echo ""
-echo "If you haven't already, you need to register this gateway in TTN:"
-echo ""
-echo "  1. Go to: https://console.cloud.thethings.network/"
-echo "  2. Select your region (${TTN_REGION})"
-echo "  3. Navigate to: Gateways > + Register gateway"
-echo "  4. Enter Gateway EUI: ${GATEWAY_EUI}"
-echo "  5. Choose frequency plan matching your hardware"
-echo "  6. Click 'Register gateway'"
-echo ""
-echo "After registration, you'll need to create an API key (next step)."
-echo ""
-read -p "Press Enter when your gateway is registered in TTN Console... "
-echo ""
+step_show_registration_instructions() {
+    echo -e "Gateway EUI: ${GREEN}$GATEWAY_EUI${NC}"
+    echo ""
+    print_warning "────────────────────────────────────────────────────────────────"
+    print_warning "IMPORTANT: Register this gateway in TTN Console before continuing"
+    print_warning "────────────────────────────────────────────────────────────────"
+    echo ""
+    echo "If you haven't already, you need to register this gateway in TTN:"
+    echo ""
+    echo "  1. Go to: https://console.cloud.thethings.network/"
+    echo "  2. Select your region (${TTN_REGION})"
+    echo "  3. Navigate to: Gateways > + Register gateway"
+    echo "  4. Enter Gateway EUI: ${GATEWAY_EUI}"
+    echo "  5. Choose frequency plan matching your hardware"
+    echo "  6. Click 'Register gateway'"
+    echo ""
+    echo "After registration, you'll need to create an API key (next step)."
+    echo ""
+    read -rp "Press Enter when your gateway is registered in TTN Console... "
+    echo ""
+}
 
-# Step 4: CUPS API Key
-echo -e "${GREEN}Step 4: Enter your CUPS API Key${NC}"
-echo ""
-echo "Now create an API key for CUPS in TTN Console:"
-echo ""
-echo "  1. Go to your gateway in TTN Console"
-echo "  2. Navigate to: API Keys > + Add API Key"
-echo "  3. Name it (e.g., 'CUPS Key')"
-echo "  4. Grant rights: 'Link as Gateway to a Gateway Server for traffic"
-echo "     exchange, i.e. write uplink and read downlink'"
-echo "  5. Click 'Create API Key' and copy the key"
-echo ""
-echo -e "${YELLOW}Note: The key is only shown once - copy it now!${NC}"
-echo ""
-echo "Paste your API key (it will not be displayed):"
-read -s CUPS_KEY
-echo ""
+step_get_cups_key() {
+    print_header "Step 4: Enter your CUPS API Key"
+    echo ""
+    echo "Now create an API key for CUPS in TTN Console:"
+    echo ""
+    echo "  1. Go to your gateway in TTN Console"
+    echo "  2. Navigate to: API Keys > + Add API Key"
+    echo "  3. Name it (e.g., 'CUPS Key')"
+    echo "  4. Grant rights: 'Link as Gateway to a Gateway Server for traffic"
+    echo "     exchange, i.e. write uplink and read downlink'"
+    echo "  5. Click 'Create API Key' and copy the key"
+    echo ""
+    print_warning "Note: The key is only shown once - copy it now!"
+    echo ""
+    echo "Paste your API key (it will not be displayed):"
+    read -rs CUPS_KEY
+    echo ""
 
-if [ -z "$CUPS_KEY" ]; then
-    echo -e "${RED}Error: API key cannot be empty.${NC}"
-    exit 1
-fi
-
-# Strip "Authorization: Bearer " prefix if user pasted the full string
-CUPS_KEY=$(echo "$CUPS_KEY" | sed 's/^Authorization: Bearer //')
-
-echo -e "${GREEN}API key received.${NC}"
-echo ""
-
-# Step 5: Setup TTN Trust Certificate
-echo -e "${GREEN}Step 5: Setting up trust certificate...${NC}"
-
-TRUST_CERT="$CUPS_DIR/cups.trust"
-
-# Use system CA bundle for maximum compatibility with TTN
-if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-    cp /etc/ssl/certs/ca-certificates.crt "$TRUST_CERT"
-    echo -e "${GREEN}Trust certificate installed (system CA bundle).${NC}"
-else
-    # Fallback: download Let's Encrypt root certificate
-    echo "System CA bundle not found, downloading Let's Encrypt root..."
-    curl -sf https://letsencrypt.org/certs/isrgrootx1.pem -o "$TRUST_CERT"
-    if [ ! -f "$TRUST_CERT" ] || [ ! -s "$TRUST_CERT" ]; then
-        echo -e "${RED}Error: Could not obtain trust certificate.${NC}"
+    if [ -z "$CUPS_KEY" ]; then
+        print_error "Error: API key cannot be empty."
         exit 1
     fi
-    echo -e "${GREEN}Trust certificate downloaded.${NC}"
-fi
-echo ""
 
-# Step 6: Select log file location
-echo -e "${GREEN}Step 6: Select log file location${NC}"
-echo "  1) Local directory ($CUPS_DIR/station.log)"
-echo "  2) System log (/var/log/station.log) - requires sudo"
-echo ""
-read -p "Enter choice [1-2]: " log_choice
+    # Strip "Authorization: Bearer " prefix if user pasted the full string
+    CUPS_KEY="${CUPS_KEY#Authorization: Bearer }"
 
-case $log_choice in
-    2)
-        LOG_FILE="/var/log/station.log"
-        echo -e "${YELLOW}Note: You will need to create the log file with proper permissions:${NC}"
-        echo -e "${YELLOW}  sudo touch /var/log/station.log${NC}"
-        echo -e "${YELLOW}  sudo chown $USER:$USER /var/log/station.log${NC}"
-        read -p "Create log file now with sudo? (Y/n): " create_log
-        if [ "$create_log" != "n" ] && [ "$create_log" != "N" ]; then
-            sudo touch /var/log/station.log
-            sudo chown $USER:$USER /var/log/station.log
-            chmod 644 /var/log/station.log
-            echo -e "${GREEN}Log file created: /var/log/station.log${NC}"
-        fi
-        ;;
-    *)
-        LOG_FILE="$CUPS_DIR/station.log"
-        touch "$LOG_FILE"
-        chmod 644 "$LOG_FILE"
-        echo -e "${GREEN}Log file will be: $LOG_FILE${NC}"
-        ;;
-esac
-echo ""
-
-# Step 7: Create credential files
-echo -e "${GREEN}Step 7: Creating credential files...${NC}"
-
-# Create cups.uri
-echo "$CUPS_URI" > "$CUPS_DIR/cups.uri"
-echo "  Created: cups.uri"
-
-# Create cups.key with proper format
-# TTN expects: Authorization: <key>
-echo "Authorization: Bearer $CUPS_KEY" > "$CUPS_DIR/cups.key"
-echo "  Created: cups.key"
-
-# Note: tc.* files are not created here - CUPS will populate them automatically
-# Creating empty tc.* files causes the station to fail with "Malformed URI" error
-
-# Step 8: Generate station.conf from template
-echo -e "${GREEN}Step 8: Generating station.conf...${NC}"
-
-if [ -f "$CUPS_DIR/station.conf.template" ]; then
-    sed -e "s|{{GATEWAY_EUI}}|$GATEWAY_EUI|g" \
-        -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
-        -e "s|{{LOG_FILE}}|$LOG_FILE|g" \
-        "$CUPS_DIR/station.conf.template" > "$CUPS_DIR/station.conf"
-    echo "  Created: station.conf"
-else
-    echo -e "${YELLOW}Warning: station.conf.template not found. Please configure station.conf manually.${NC}"
-fi
-
-# Step 9: Set permissions
-echo -e "${GREEN}Step 9: Setting file permissions...${NC}"
-chmod 600 "$CUPS_DIR/cups.key" 2>/dev/null || true
-chmod 600 "$CUPS_DIR/tc.key" 2>/dev/null || true
-chmod 644 "$CUPS_DIR/cups.uri" 2>/dev/null || true
-chmod 644 "$CUPS_DIR/cups.trust" 2>/dev/null || true
-chmod 644 "$CUPS_DIR/station.conf" 2>/dev/null || true
-echo "  Permissions set."
-
-# Step 10: Service setup
-echo ""
-echo -e "${GREEN}Step 10: Gateway startup configuration${NC}"
-echo ""
-read -p "Do you want to run the gateway as a systemd service? (y/N): " setup_service
-
-if [ "$setup_service" = "y" ] || [ "$setup_service" = "Y" ]; then
+    print_success "API key received."
     echo ""
-    echo -e "${GREEN}Setting up systemd service...${NC}"
+}
 
-    SERVICE_FILE="/etc/systemd/system/basicstation.service"
+step_setup_trust_cert() {
+    print_header "Step 5: Setting up trust certificate..."
 
-    # Create the service file
-    sudo tee "$SERVICE_FILE" > /dev/null << EOF
+    local trust_cert="$CUPS_DIR/cups.trust"
+
+    if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+        cp /etc/ssl/certs/ca-certificates.crt "$trust_cert"
+        print_success "Trust certificate installed (system CA bundle)."
+    else
+        echo "System CA bundle not found, downloading Let's Encrypt root..."
+        curl -sf https://letsencrypt.org/certs/isrgrootx1.pem -o "$trust_cert"
+        if [ ! -f "$trust_cert" ] || [ ! -s "$trust_cert" ]; then
+            print_error "Error: Could not obtain trust certificate."
+            exit 1
+        fi
+        print_success "Trust certificate downloaded."
+    fi
+    echo ""
+}
+
+step_select_log_location() {
+    print_header "Step 6: Select log file location"
+    echo "  1) Local directory ($CUPS_DIR/station.log)"
+    echo "  2) System log (/var/log/station.log) - requires sudo"
+    echo ""
+    read -rp "Enter choice [1-2]: " log_choice
+
+    case $log_choice in
+        2)
+            LOG_FILE="/var/log/station.log"
+            print_warning "Note: You will need to create the log file with proper permissions:"
+            print_warning "  sudo touch /var/log/station.log"
+            print_warning "  sudo chown $USER:$USER /var/log/station.log"
+            if confirm "Create log file now with sudo?" "y"; then
+                sudo touch /var/log/station.log
+                sudo chown "$USER:$USER" /var/log/station.log
+                chmod 644 /var/log/station.log
+                print_success "Log file created: /var/log/station.log"
+            fi
+            ;;
+        *)
+            LOG_FILE="$CUPS_DIR/station.log"
+            touch "$LOG_FILE"
+            chmod 644 "$LOG_FILE"
+            print_success "Log file will be: $LOG_FILE"
+            ;;
+    esac
+    echo ""
+}
+
+step_create_credentials() {
+    print_header "Step 7: Creating credential files..."
+
+    echo "$CUPS_URI" > "$CUPS_DIR/cups.uri"
+    echo "  Created: cups.uri"
+
+    echo "Authorization: Bearer $CUPS_KEY" > "$CUPS_DIR/cups.key"
+    echo "  Created: cups.key"
+
+    print_header "Step 8: Generating station.conf..."
+
+    if [ -f "$CUPS_DIR/station.conf.template" ]; then
+        sed -e "s|{{GATEWAY_EUI}}|$GATEWAY_EUI|g" \
+            -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
+            -e "s|{{LOG_FILE}}|$LOG_FILE|g" \
+            "$CUPS_DIR/station.conf.template" > "$CUPS_DIR/station.conf"
+        echo "  Created: station.conf"
+    else
+        print_warning "Warning: station.conf.template not found. Please configure station.conf manually."
+    fi
+
+    print_header "Step 9: Setting file permissions..."
+    chmod 600 "$CUPS_DIR/cups.key" 2>/dev/null || true
+    chmod 600 "$CUPS_DIR/tc.key" 2>/dev/null || true
+    chmod 644 "$CUPS_DIR/cups.uri" 2>/dev/null || true
+    chmod 644 "$CUPS_DIR/cups.trust" 2>/dev/null || true
+    chmod 644 "$CUPS_DIR/station.conf" 2>/dev/null || true
+    echo "  Permissions set."
+}
+
+step_setup_service() {
+    echo ""
+    print_header "Step 10: Gateway startup configuration"
+    echo ""
+
+    if ! confirm "Do you want to run the gateway as a systemd service?"; then
+        print_summary "manual"
+        return 0
+    fi
+
+    echo ""
+    print_success "Setting up systemd service..."
+
+    local service_file="/etc/systemd/system/basicstation.service"
+
+    sudo tee "$service_file" > /dev/null << EOF
 [Unit]
 Description=LoRa Basics Station (SX1302/Corecell) for TTN (CUPS)
 After=network-online.target
@@ -335,7 +361,7 @@ Type=simple
 User=root
 WorkingDirectory=$SCRIPT_DIR
 
-ExecStart=$SCRIPT_DIR/build-corecell-std/bin/station --home $CUPS_DIR
+ExecStart=$STATION_BINARY --home $CUPS_DIR
 
 Restart=on-failure
 RestartSec=5
@@ -358,62 +384,76 @@ SyslogIdentifier=basicstation
 WantedBy=multi-user.target
 EOF
 
-    echo "  Created: $SERVICE_FILE"
+    echo "  Created: $service_file"
 
-    # Reload systemd and enable service
     sudo systemctl daemon-reload
     sudo systemctl enable basicstation.service
     echo "  Service enabled."
 
     echo ""
-    read -p "Do you want to start the service now? (Y/n): " start_now
-    if [ "$start_now" != "n" ] && [ "$start_now" != "N" ]; then
+    if confirm "Do you want to start the service now?" "y"; then
         sudo systemctl start basicstation.service
         sleep 2
         if systemctl is-active --quiet basicstation.service; then
-            echo -e "${GREEN}Service started successfully!${NC}"
+            print_success "Service started successfully!"
         else
-            echo -e "${YELLOW}Service may have failed to start. Check status with:${NC}"
+            print_warning "Service may have failed to start. Check status with:"
             echo "  sudo systemctl status basicstation.service"
             echo "  sudo journalctl -u basicstation.service -f"
         fi
     else
         echo ""
         echo "To start the service later, run:"
-        echo -e "  ${YELLOW}sudo systemctl start basicstation.service${NC}"
+        print_warning "  sudo systemctl start basicstation.service"
     fi
 
+    print_summary "service"
+}
+
+print_summary() {
+    local mode="$1"
+
     echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN} Setup Complete!${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
+    print_banner "Setup Complete!"
     echo "Your gateway is configured with:"
     echo "  Region:      $TTN_REGION"
     echo "  Gateway EUI: $GATEWAY_EUI"
     echo "  Config dir:  $CUPS_DIR"
     echo "  Log file:    $LOG_FILE"
     echo ""
-    echo "Useful commands:"
-    echo -e "  ${YELLOW}sudo systemctl status basicstation.service${NC}  - Check service status"
-    echo -e "  ${YELLOW}sudo systemctl stop basicstation.service${NC}   - Stop the service"
-    echo -e "  ${YELLOW}sudo systemctl restart basicstation.service${NC} - Restart the service"
-    echo -e "  ${YELLOW}sudo journalctl -u basicstation.service -f${NC}  - View live logs"
-else
-    echo ""
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN} Setup Complete!${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-    echo "Your gateway is configured with:"
-    echo "  Region:      $TTN_REGION"
-    echo "  Gateway EUI: $GATEWAY_EUI"
-    echo "  Config dir:  $CUPS_DIR"
-    echo "  Log file:    $LOG_FILE"
-    echo ""
-    echo "To start the gateway manually:"
-    echo -e "  ${YELLOW}cd $SCRIPT_DIR/examples/corecell${NC}"
-    echo -e "  ${YELLOW}./start-station.sh -l ./cups-ttn${NC}"
-    echo ""
-    echo -e "${YELLOW}Note: You may need to run start-station.sh with sudo for GPIO access.${NC}"
-fi
+
+    if [ "$mode" = "service" ]; then
+        echo "Useful commands:"
+        print_warning "  sudo systemctl status basicstation.service  - Check service status"
+        print_warning "  sudo systemctl stop basicstation.service   - Stop the service"
+        print_warning "  sudo systemctl restart basicstation.service - Restart the service"
+        print_warning "  sudo journalctl -u basicstation.service -f  - View live logs"
+    else
+        echo "To start the gateway manually:"
+        print_warning "  cd $SCRIPT_DIR/examples/corecell"
+        print_warning "  ./start-station.sh -l ./cups-ttn"
+        echo ""
+        print_warning "Note: You may need to run start-station.sh with sudo for GPIO access."
+    fi
+}
+
+#######################################
+# Main
+#######################################
+
+main() {
+    print_banner "LoRa Basic Station Setup for TTN"
+
+    step_check_existing_credentials
+    step_build_station
+    step_select_region
+    step_detect_eui
+    step_show_registration_instructions
+    step_get_cups_key
+    step_setup_trust_cert
+    step_select_log_location
+    step_create_credentials
+    step_setup_service
+}
+
+main "$@"
