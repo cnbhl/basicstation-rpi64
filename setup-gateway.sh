@@ -19,9 +19,11 @@ readonly SCRIPT_DIR
 readonly CUPS_DIR="$SCRIPT_DIR/examples/corecell/cups-ttn"
 readonly BUILD_DIR="$SCRIPT_DIR/build-corecell-std"
 readonly STATION_BINARY="$BUILD_DIR/bin/station"
-readonly CHIP_ID_SOURCE="$SCRIPT_DIR/tools/chip_id/chip_id.c"
+readonly CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
+readonly CHIP_ID_SOURCE="$CHIP_ID_DIR/chip_id.c"
+readonly CHIP_ID_LOG_STUB="$CHIP_ID_DIR/log_stub.c"
 readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
-readonly RESET_LGW_SCRIPT="$SCRIPT_DIR/tools/chip_id/reset_lgw.sh"
+readonly RESET_LGW_SCRIPT="$CHIP_ID_DIR/reset_lgw.sh"
 
 #######################################
 # Utility Functions
@@ -103,15 +105,23 @@ build_chip_id() {
     fi
 
     echo "  Building chip_id tool..."
+    local build_err
+    build_err=$(mktemp)
     if gcc -std=gnu11 -O2 \
         -I"$lgw_inc" \
-        "$CHIP_ID_SOURCE" \
+        "$CHIP_ID_SOURCE" "$CHIP_ID_LOG_STUB" \
         -L"$lgw_lib" -llgw1302 -lm -lpthread -lrt \
-        -o "$CHIP_ID_TOOL" 2>/dev/null; then
+        -o "$CHIP_ID_TOOL" 2>"$build_err"; then
+        rm -f "$build_err"
         echo "  Created: $CHIP_ID_TOOL"
         return 0
     else
         print_warning "  Failed to build chip_id (non-critical, manual EUI entry available)"
+        if [ -s "$build_err" ]; then
+            echo "  Build error:"
+            sed 's/^/    /' "$build_err"
+        fi
+        rm -f "$build_err"
         return 1
     fi
 }
