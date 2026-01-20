@@ -100,8 +100,8 @@ basicstation/
 ├── tools/
 │   ├── README.md
 │   └── chip_id/                          # EUI detection tool
-│       ├── chip_id                       # Pre-built binary
-│       ├── chip_id.c                     # Source code
+│       ├── chip_id.c                     # Source code (from sx1302_hal)
+│       ├── log_stub.c                    # Logging stub for standalone build
 │       ├── reset_lgw.sh                  # Pi 5 compatible reset
 │       ├── LICENSE                       # Semtech BSD 3-Clause
 │       └── README.md
@@ -116,11 +116,56 @@ basicstation/
             └── README.md
 ```
 
+> **Note:** The `chip_id` binary is built automatically from source during the setup process, ensuring compatibility with both 32-bit and 64-bit ARM systems.
+
+---
+
+## Raspberry Pi Configuration
+
+Before running the setup script, you must configure your Raspberry Pi interfaces. The SX1302/SX1303 concentrator requires SPI, I2C, and proper serial port settings.
+
+### Using raspi-config
+
+```bash
+sudo raspi-config
+```
+
+Navigate to **Interface Options** and configure:
+
+| Interface | Setting | Reason |
+|-----------|---------|--------|
+| **SPI** | Enable | Primary communication with SX1302 chip |
+| **I2C** | Enable | Required for temperature sensor and EEPROM |
+| **Serial Port** | Disable shell, Enable hardware | GPS module uses UART (if equipped) |
+
+For the serial port, select:
+- "Would you like a login shell over serial?" → **No**
+- "Would you like the serial port hardware enabled?" → **Yes**
+
+### Reboot Required
+
+After changing interface settings, reboot your Pi:
+
+```bash
+sudo reboot
+```
+
+### Verify SPI is Enabled
+
+```bash
+ls -la /dev/spidev*
+```
+
+You should see `/dev/spidev0.0` and `/dev/spidev0.1`.
+
+For more details, see the [Seeed WM1302 documentation](https://wiki.seeedstudio.com/WM1302_module/) and [Waveshare SX1302 wiki](https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT).
+
 ---
 
 ## Prerequisites
 
-- Raspberry Pi 3/4/5 with SPI enabled
+- Raspberry Pi 3/4/5 (32-bit or 64-bit OS)
+- SPI, I2C enabled (see configuration above)
 - SX1302 or SX1303 LoRa concentrator (e.g., WM1302, RAK2287)
 - Gateway registered on [The Things Network](https://console.cloud.thethings.network/)
 - CUPS API Key from TTN Console
