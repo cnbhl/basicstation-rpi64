@@ -17,9 +17,11 @@ readonly NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly SCRIPT_DIR
 readonly CUPS_DIR="$SCRIPT_DIR/examples/corecell/cups-ttn"
-readonly STATION_BINARY="$SCRIPT_DIR/build-corecell-std/bin/station"
-readonly CHIP_ID_TOOL="$SCRIPT_DIR/tools/chip_id/chip_id"
-readonly CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
+readonly BUILD_DIR="$SCRIPT_DIR/build-corecell-std"
+readonly STATION_BINARY="$BUILD_DIR/bin/station"
+readonly CHIP_ID_SOURCE="$SCRIPT_DIR/tools/chip_id/chip_id.c"
+readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
+readonly RESET_LGW_SCRIPT="$SCRIPT_DIR/tools/chip_id/reset_lgw.sh"
 
 #######################################
 # Utility Functions
@@ -85,6 +87,35 @@ step_check_existing_credentials() {
     fi
 }
 
+build_chip_id() {
+    # Build chip_id tool using the libloragw from the station build
+    local lgw_inc="$BUILD_DIR/include/lgw"
+    local lgw_lib="$BUILD_DIR/lib"
+
+    if [ ! -d "$lgw_inc" ] || [ ! -f "$lgw_lib/liblgw1302.a" ]; then
+        print_warning "Cannot build chip_id: libloragw not found (station build required first)"
+        return 1
+    fi
+
+    if [ ! -f "$CHIP_ID_SOURCE" ]; then
+        print_warning "Cannot build chip_id: source file not found at $CHIP_ID_SOURCE"
+        return 1
+    fi
+
+    echo "  Building chip_id tool..."
+    if gcc -std=gnu11 -O2 \
+        -I"$lgw_inc" \
+        "$CHIP_ID_SOURCE" \
+        -L"$lgw_lib" -llgw1302 -lm -lpthread -lrt \
+        -o "$CHIP_ID_TOOL" 2>/dev/null; then
+        echo "  Created: $CHIP_ID_TOOL"
+        return 0
+    else
+        print_warning "  Failed to build chip_id (non-critical, manual EUI entry available)"
+        return 1
+    fi
+}
+
 step_build_station() {
     print_header "Step 1: Build the station binary"
     echo ""
@@ -94,12 +125,17 @@ step_build_station() {
     echo "  - Download and compile dependencies (mbedTLS, libloragw)"
     echo "  - Compile the Basic Station source code"
     echo "  - Create the executable at: build-corecell-std/bin/station"
+    echo "  - Build the chip_id tool for EUI detection"
     echo ""
 
     if [ -f "$STATION_BINARY" ]; then
         print_warning "Note: A station binary already exists."
         if ! confirm "Do you want to rebuild?"; then
             print_success "Skipping build, using existing binary."
+            # Still try to build chip_id if it doesn't exist
+            if [ ! -x "$CHIP_ID_TOOL" ]; then
+                build_chip_id
+            fi
             echo ""
             return 0
         fi
@@ -118,7 +154,8 @@ step_build_station() {
     cd "$SCRIPT_DIR"
     if make platform=corecell variant=std; then
         echo ""
-        print_success "Build completed successfully."
+        print_success "Station build completed successfully."
+        build_chip_id
     else
         print_error "Build failed. Please check the error messages above."
         echo "You can try building manually with: make platform=corecell variant=std"
@@ -162,7 +199,16 @@ step_detect_eui() {
     echo ""
 
     if [ -x "$CHIP_ID_TOOL" ]; then
-        cd "$CHIP_ID_DIR"
+        # chip_id requires reset_lgw.sh in the same directory
+        # Copy it to the build/bin directory if not present
+        local chip_id_dir
+        chip_id_dir="$(dirname "$CHIP_ID_TOOL")"
+        if [ ! -f "$chip_id_dir/reset_lgw.sh" ] && [ -f "$RESET_LGW_SCRIPT" ]; then
+            cp "$RESET_LGW_SCRIPT" "$chip_id_dir/"
+            chmod +x "$chip_id_dir/reset_lgw.sh"
+        fi
+
+        cd "$chip_id_dir"
         local chip_output
         chip_output=$(sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
         cd "$SCRIPT_DIR"
@@ -179,10 +225,13 @@ step_detect_eui() {
             detected_eui=""
         else
             print_warning "Could not auto-detect EUI from SX1302 chip."
+            if [ -n "$chip_output" ]; then
+                echo "chip_id output: $chip_output"
+            fi
         fi
     else
         print_warning "chip_id tool not found at $CHIP_ID_TOOL"
-        echo "You can build it from sx1302_hal or enter the EUI manually."
+        echo "The tool will be built automatically when you build the station."
     fi
 
     echo ""

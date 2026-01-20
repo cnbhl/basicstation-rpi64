@@ -14,14 +14,28 @@ This tool is derived from the **Semtech SX1302/SX1303 HAL** (Hardware Abstractio
 
 | File | Description |
 |------|-------------|
-| `chip_id` | Pre-built binary for Raspberry Pi (ARM64) |
-| `chip_id.c` | Original source code from sx1302_hal |
+| `chip_id.c` | Source code from sx1302_hal |
 | `reset_lgw.sh` | GPIO reset script with Raspberry Pi 5 support |
 | `LICENSE` | Semtech BSD 3-Clause License |
+
+## Building
+
+The `chip_id` tool is automatically built by `setup-gateway.sh` after the station build completes. It uses the same libloragw library and is placed in `build-corecell-std/bin/`.
+
+To build manually after the station is built:
+
+```bash
+gcc -std=gnu11 -O2 \
+    -I build-corecell-std/include/lgw \
+    tools/chip_id/chip_id.c \
+    -L build-corecell-std/lib -llgw1302 -lm -lpthread -lrt \
+    -o build-corecell-std/bin/chip_id
+```
 
 ## Usage
 
 ```bash
+cd build-corecell-std/bin
 sudo ./chip_id -d /dev/spidev0.0
 ```
 
@@ -37,7 +51,7 @@ Closing SPI communication interface
 ## Requirements
 
 - SX1302 or SX1303 concentrator connected via SPI
-- `reset_lgw.sh` script in the same directory (for GPIO reset)
+- `reset_lgw.sh` script in the same directory (copied automatically by setup script)
 - Root privileges (sudo) for SPI and GPIO access
 
 ## Raspberry Pi 5 Compatibility
@@ -47,18 +61,6 @@ The included `reset_lgw.sh` script automatically detects the GPIO base offset fo
 - Raspberry Pi 5: GPIO base 571
 - Raspberry Pi 4/3: GPIO base 512
 - Older models: GPIO base 0
-
-## Building from Source
-
-To rebuild the binary from source, you need the full sx1302_hal repository:
-
-```bash
-git clone https://github.com/Lora-net/sx1302_hal.git
-cd sx1302_hal
-make clean all
-cd util_chip_id
-./chip_id
-```
 
 ## License
 
