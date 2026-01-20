@@ -340,6 +340,12 @@ step_setup_service() {
     print_header "Step 10: Gateway startup configuration"
     echo ""
 
+    # Check if service is already running (for later reload/restart)
+    local service_was_active=false
+    if systemctl is-active --quiet basicstation.service 2>/dev/null; then
+        service_was_active=true
+    fi
+
     if ! confirm "Do you want to run the gateway as a systemd service?"; then
         print_summary "manual"
         return 0
@@ -371,7 +377,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=false
-ProtectKernelTunables=true
+ProtectKernelTunables=false
 ProtectKernelModules=true
 ProtectControlGroups=true
 
@@ -391,7 +397,18 @@ EOF
     echo "  Service enabled."
 
     echo ""
-    if confirm "Do you want to start the service now?" "y"; then
+    if [ "$service_was_active" = true ]; then
+        print_warning "Service was already running. Restarting with new configuration..."
+        sudo systemctl restart basicstation.service
+        sleep 2
+        if systemctl is-active --quiet basicstation.service; then
+            print_success "Service restarted successfully!"
+        else
+            print_warning "Service may have failed to restart. Check status with:"
+            echo "  sudo systemctl status basicstation.service"
+            echo "  sudo journalctl -u basicstation.service -f"
+        fi
+    elif confirm "Do you want to start the service now?" "y"; then
         sudo systemctl start basicstation.service
         sleep 2
         if systemctl is-active --quiet basicstation.service; then
