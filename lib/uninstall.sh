@@ -3,7 +3,7 @@
 # uninstall.sh - Uninstall functions
 #
 # This file is sourced by setup-gateway.sh
-# Requires: common.sh, service.sh
+# Requires: common.sh (including logging), service.sh
 #
 # Expected global variables from main script:
 #   SCRIPT_DIR, CUPS_DIR
@@ -192,11 +192,14 @@ uninstall_build() {
 run_uninstall() {
     print_banner "LoRa Basic Station Uninstall"
 
+    log_info "=== Starting uninstall wizard ==="
+
     echo "This will remove the Basic Station installation components."
     echo "You will be prompted before each removal step."
     echo ""
 
     if ! confirm "Proceed with uninstall?"; then
+        log_info "Uninstall cancelled by user"
         echo "Uninstall cancelled."
         exit 0
     fi
@@ -204,17 +207,22 @@ run_uninstall() {
     echo ""
 
     uninstall_service
+    log_debug "Completed: uninstall_service"
     echo ""
 
     uninstall_credentials
+    log_debug "Completed: uninstall_credentials"
     echo ""
 
     uninstall_logs
+    log_debug "Completed: uninstall_logs"
     echo ""
 
     uninstall_build
+    log_debug "Completed: uninstall_build"
     echo ""
 
+    log_info "=== Uninstall wizard completed ==="
     print_banner "Uninstall Complete"
     echo "The following may still remain:"
     echo "  - Source code in: $SCRIPT_DIR"

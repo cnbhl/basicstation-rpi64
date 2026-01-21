@@ -39,6 +39,7 @@ CUPS_KEY=""
 LOG_FILE=""
 GPS_DEVICE=""
 MODE="setup"
+SKIP_DEPS=false
 
 #######################################
 # Source Library Files
@@ -74,6 +75,7 @@ print_usage() {
     echo "  -h, --help       Show this help message and exit"
     echo "  -u, --uninstall  Remove installed service, credentials, and logs"
     echo "  -v, --verbose    Enable verbose (debug) logging"
+    echo "  --skip-deps      Skip dependency checks (advanced users only)"
     echo ""
     echo "Without options, runs the interactive setup wizard."
     echo ""
@@ -101,6 +103,10 @@ parse_args() {
                 ;;
             -v|--verbose)
                 CURRENT_LOG_LEVEL=$LOG_LEVEL_DEBUG
+                shift
+                ;;
+            --skip-deps)
+                SKIP_DEPS=true
                 shift
                 ;;
             *)

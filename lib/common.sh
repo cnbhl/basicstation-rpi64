@@ -232,3 +232,124 @@ check_spi_available() {
     fi
     return 0
 }
+
+#######################################
+# Dependency Validation
+#######################################
+
+# Required dependencies for setup script
+# Format: "command:package:purpose"
+readonly REQUIRED_DEPS=(
+    "curl:curl:downloading certificates"
+    "gcc:gcc:compiling station and chip_id"
+    "make:make:building station"
+    "sed:sed:template processing"
+    "stty:coreutils:GPS serial port configuration"
+    "grep:grep:text processing"
+    "timeout:coreutils:GPS detection timeouts"
+)
+
+# Optional dependencies (warn if missing but don't fail)
+readonly OPTIONAL_DEPS=(
+    "systemctl:systemd:service management"
+)
+
+# Check if a single dependency is available
+# Args: $1 = command, $2 = package name, $3 = purpose
+# Returns: 0 if found, 1 if missing
+check_dependency() {
+    local cmd="$1"
+    local package="$2"
+    local purpose="$3"
+
+    if command_exists "$cmd"; then
+        log_debug "Dependency check: $cmd found"
+        return 0
+    else
+        log_error "Missing dependency: $cmd (package: $package, needed for: $purpose)"
+        return 1
+    fi
+}
+
+# Check all required dependencies
+# Returns: 0 if all found, 1 if any missing
+check_required_dependencies() {
+    local missing=()
+    local dep cmd package purpose
+
+    log_info "Checking required dependencies"
+
+    for dep in "${REQUIRED_DEPS[@]}"; do
+        IFS=':' read -r cmd package purpose <<< "$dep"
+        if ! check_dependency "$cmd" "$package" "$purpose"; then
+            missing+=("$cmd ($package)")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        print_error "Missing required dependencies:"
+        for item in "${missing[@]}"; do
+            echo "  - $item"
+        done
+        echo ""
+        echo "Please install missing packages:"
+        echo "  sudo apt-get update"
+        echo "  sudo apt-get install ${missing[*]// (*)/}"
+        return 1
+    fi
+
+    log_info "All required dependencies found"
+    return 0
+}
+
+# Check optional dependencies and warn if missing
+check_optional_dependencies() {
+    local dep cmd package purpose
+
+    log_info "Checking optional dependencies"
+
+    for dep in "${OPTIONAL_DEPS[@]}"; do
+        IFS=':' read -r cmd package purpose <<< "$dep"
+        if ! command_exists "$cmd"; then
+            log_warning "Optional dependency missing: $cmd (needed for: $purpose)"
+            print_warning "Note: '$cmd' not found - $purpose will not be available"
+        fi
+    done
+}
+
+# Run all dependency checks
+# Args: $1 = "strict" to fail on missing required deps (default), "warn" to only warn
+# Returns: 0 if OK (or warn mode), 1 if missing required deps in strict mode
+check_all_dependencies() {
+    local mode="${1:-strict}"
+    local result=0
+
+    echo "Checking system dependencies..."
+    log_info "Running dependency checks (mode: $mode)"
+
+    # Check required dependencies
+    if ! check_required_dependencies; then
+        if [[ "$mode" == "strict" ]]; then
+            result=1
+        fi
+    fi
+
+    # Check optional dependencies (always just warn)
+    check_optional_dependencies
+
+    # Check SPI availability
+    if ! check_spi_available; then
+        if [[ "$mode" == "strict" ]]; then
+            result=1
+        fi
+    else
+        log_debug "SPI device available"
+    fi
+
+    if [[ $result -eq 0 ]]; then
+        print_success "All dependencies satisfied"
+    fi
+
+    echo ""
+    return $result
+}

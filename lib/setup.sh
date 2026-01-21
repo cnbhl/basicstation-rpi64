@@ -10,6 +10,7 @@
 #   CHIP_ID_DIR, CHIP_ID_SOURCE, CHIP_ID_LOG_STUB, CHIP_ID_TOOL
 #   RESET_LGW_SCRIPT
 #   TTN_REGION, CUPS_URI, GATEWAY_EUI, CUPS_KEY, LOG_FILE, GPS_DEVICE
+#   SKIP_DEPS
 #
 
 #######################################
@@ -543,6 +544,19 @@ run_setup() {
     print_banner "LoRa Basic Station Setup for TTN"
 
     log_info "=== Starting setup wizard ==="
+
+    # Check dependencies before proceeding
+    if [[ "$SKIP_DEPS" == true ]]; then
+        log_warning "Skipping dependency checks (--skip-deps flag)"
+        print_warning "Skipping dependency checks as requested."
+        echo ""
+    elif ! check_all_dependencies; then
+        print_error "Cannot proceed without required dependencies."
+        echo "Please install the missing packages and try again."
+        echo ""
+        echo "Use --skip-deps to bypass this check (not recommended)."
+        exit 1
+    fi
 
     step_check_existing_credentials
     log_debug "Completed: check_existing_credentials"
