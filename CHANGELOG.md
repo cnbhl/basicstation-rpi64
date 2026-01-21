@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.6-cnbhl.3 - 2025-01-21
+
+* security: Use `set -euo pipefail` for stricter error handling
+* security: Write secrets via here-string to prevent process listing exposure
+* security: Atomic file writes with permissions set before content written
+* security: Sanitize user input for sed to prevent injection attacks
+* security: Consistent quoting of all variables
+* refactor: Added reusable input functions (confirm, read_secret, read_validated)
+* refactor: Added validation functions (validate_eui, validate_not_empty, sanitize_for_sed)
+* refactor: Added secure file operations (write_file_secure, write_secret_file, copy_file)
+* refactor: Added system check functions (command_exists, file_exists, check_spi_available)
+* refactor: Added service management functions (service_is_active, service_start, service_restart)
+* refactor: Added safe template processing with process_template()
+
 ## 2.0.6-cnbhl.2 - 2025-01-20
 
 * setup: Build chip_id from source for architecture-independent EUI detection
