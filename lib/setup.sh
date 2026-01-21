@@ -3,7 +3,7 @@
 # setup.sh - Setup wizard steps
 #
 # This file is sourced by setup-gateway.sh
-# Requires: common.sh, validation.sh, file_ops.sh, service.sh
+# Requires: common.sh (including logging), validation.sh, file_ops.sh, service.sh, gps.sh
 #
 # Expected global variables from main script:
 #   SCRIPT_DIR, CUPS_DIR, BUILD_DIR, STATION_BINARY
@@ -152,20 +152,26 @@ step_detect_eui() {
     echo ""
 
     if file_executable "$CHIP_ID_TOOL"; then
+        log_debug "Using chip_id tool at $CHIP_ID_TOOL"
+
         # chip_id requires reset_lgw.sh in the same directory
         local chip_id_dir
         chip_id_dir="$(dirname "$CHIP_ID_TOOL")"
 
         if [[ ! -f "$chip_id_dir/reset_lgw.sh" ]] && file_exists "$RESET_LGW_SCRIPT"; then
             copy_file "$RESET_LGW_SCRIPT" "$chip_id_dir/reset_lgw.sh" "755"
+            log_debug "Copied reset_lgw.sh to $chip_id_dir"
         fi
 
         local chip_output
+        log_debug "Running: sudo ./chip_id -d /dev/spidev0.0"
         chip_output=$(cd "$chip_id_dir" && sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
+        log_debug "chip_id output: $chip_output"
 
         detected_eui=$(printf '%s' "$chip_output" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]')
 
         if [[ -n "$detected_eui" ]] && validate_eui "$detected_eui"; then
+            log_info "Detected Gateway EUI: $detected_eui"
             echo -e "Detected EUI from SX1302 chip: ${GREEN}$detected_eui${NC}"
             echo ""
             if confirm "Use this EUI?" "y"; then
@@ -175,12 +181,14 @@ step_detect_eui() {
             detected_eui=""
         else
             print_warning "Could not auto-detect EUI from SX1302 chip."
+            log_warning "EUI detection failed. chip_id output: $chip_output"
             if [[ -n "$chip_output" ]]; then
                 echo "chip_id output: $chip_output"
             fi
         fi
     else
         print_warning "chip_id tool not found at $CHIP_ID_TOOL"
+        log_warning "chip_id tool not found at $CHIP_ID_TOOL"
         echo "The tool will be built automatically when you build the station."
     fi
 
@@ -509,6 +517,8 @@ print_summary() {
     echo "  Config dir:  $CUPS_DIR"
     echo "  Log file:    $LOG_FILE"
     echo ""
+    echo "Setup log:     $(get_log_file)"
+    echo ""
 
     if [[ "$mode" == "service" ]]; then
         echo "Useful commands:"
@@ -532,15 +542,37 @@ print_summary() {
 run_setup() {
     print_banner "LoRa Basic Station Setup for TTN"
 
+    log_info "=== Starting setup wizard ==="
+
     step_check_existing_credentials
+    log_debug "Completed: check_existing_credentials"
+
     step_build_station
+    log_debug "Completed: build_station"
+
     step_select_region
+    log_info "Selected region: $TTN_REGION"
+
     step_detect_eui
+    log_info "Gateway EUI: $GATEWAY_EUI"
+
     step_show_registration_instructions
+
     step_get_cups_key
+    log_debug "Completed: get_cups_key (key received)"
+
     step_setup_trust_cert
+    log_debug "Completed: setup_trust_cert"
+
     step_select_log_location
+    log_info "Log file location: $LOG_FILE"
+
     step_detect_gps
+    log_info "GPS device: ${GPS_DEVICE:-disabled}"
+
     step_create_credentials
+    log_debug "Completed: create_credentials"
+
     step_setup_service
+    log_info "=== Setup wizard completed ==="
 }
