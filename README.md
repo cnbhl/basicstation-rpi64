@@ -102,7 +102,6 @@ basicstation/
 │   └── chip_id/                          # EUI detection tool
 │       ├── chip_id.c                     # Source code (from sx1302_hal)
 │       ├── log_stub.c                    # Logging stub for standalone build
-│       ├── reset_lgw.sh                  # Pi 5 compatible reset
 │       ├── LICENSE                       # Semtech BSD 3-Clause
 │       └── README.md
 └── examples/
@@ -110,7 +109,7 @@ basicstation/
         └── cups-ttn/                     # TTN CUPS configuration
             ├── station.conf.template
             ├── cups.uri.example
-            ├── reset_lgw.sh              # Pi 5 compatible reset
+            ├── reset_lgw.sh              # Pi 5 compatible reset (single source)
             ├── start-station.sh
             ├── rinit.sh
             └── README.md

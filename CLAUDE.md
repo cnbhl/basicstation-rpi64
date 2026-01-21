@@ -61,11 +61,15 @@ Security patterns used:
 ### `examples/corecell/cups-ttn/`
 TTN CUPS configuration directory:
 - `station.conf.template` - Template with `{{GATEWAY_EUI}}`, `{{INSTALL_DIR}}`, `{{LOG_FILE}}` placeholders
-- `reset_lgw.sh` - GPIO reset script with Pi 5 support
+- `reset_lgw.sh` - GPIO reset script with Pi 5 support (single source of truth)
 - `start-station.sh` - Launch script (`-d` flag for debug variant)
-- `rinit.sh` - Radio initialization called by station
+- `rinit.sh` - Radio initialization called by station (invokes `reset_lgw.sh`)
 
 ### `examples/corecell/cups-ttn/reset_lgw.sh`
+Single location for the GPIO reset script. Used by:
+- `rinit.sh` at runtime (station calls it via `radio_init`)
+- `setup-gateway.sh` copies it to build directory for `chip_id` EUI detection
+
 Handles Raspberry Pi GPIO offset differences:
 - Pi 5: GPIO base 571
 - Pi 4/3: GPIO base 512
