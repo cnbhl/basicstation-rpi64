@@ -34,6 +34,7 @@ CUPS_URI=""
 GATEWAY_EUI=""
 CUPS_KEY=""
 LOG_FILE=""
+GPS_DEVICE=""
 
 #######################################
 # Output Functions
@@ -234,6 +235,83 @@ check_spi_available() {
         return 1
     fi
     return 0
+}
+
+#######################################
+# GPS Detection Functions
+#######################################
+
+# Common serial ports where GPS modules are found
+readonly GPS_PORTS=("/dev/ttyAMA0" "/dev/ttyS0" "/dev/serial0" "/dev/ttyAMA10")
+
+# Common baud rates for GPS modules (most common first)
+readonly GPS_BAUD_RATES=(9600 4800 19200 38400 57600 115200)
+
+# Check if data contains NMEA sentences
+# Args: $1 = data to check
+# Returns: 0 if NMEA found, 1 otherwise
+contains_nmea() {
+    local data="$1"
+    # NMEA sentences start with $ followed by talker ID (GP, GN, GL, GA, GB)
+    [[ "$data" =~ \$G[PNLAB] ]]
+}
+
+# Try to read GPS data from a serial port at a specific baud rate
+# Args: $1 = port, $2 = baud rate
+# Returns: 0 if NMEA data found, 1 otherwise
+try_gps_port() {
+    local port="$1"
+    local baud="$2"
+    local data
+
+    # Check if port exists
+    if [[ ! -c "$port" ]]; then
+        return 1
+    fi
+
+    # Configure serial port (requires sudo for serial port access)
+    if ! sudo stty -F "$port" "$baud" raw -echo -echoe -echok 2>/dev/null; then
+        return 1
+    fi
+
+    # Read data for 2 seconds, capture output
+    data=$(sudo timeout 2s cat "$port" 2>/dev/null | head -c 1024 | tr -cd '[:print:]\n$' || true)
+
+    if contains_nmea "$data"; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Detect GPS port and baud rate by scanning available ports
+# Sets GPS_DEVICE global variable on success
+# Returns: 0 if GPS found, 1 otherwise
+detect_gps_port() {
+    local port baud
+
+    for port in "${GPS_PORTS[@]}"; do
+        # Skip if port doesn't exist
+        [[ ! -e "$port" ]] && continue
+
+        # Resolve symlinks to avoid testing the same device twice
+        local real_port
+        real_port=$(readlink -f "$port" 2>/dev/null || echo "$port")
+
+        for baud in "${GPS_BAUD_RATES[@]}"; do
+            echo -n "  Trying $port @ ${baud}bps... "
+
+            if try_gps_port "$port" "$baud"; then
+                echo -e "${GREEN}NMEA data found!${NC}"
+                GPS_DEVICE="$port"
+                return 0
+            else
+                echo "no data"
+            fi
+        done
+    done
+
+    return 1
 }
 
 #######################################
@@ -618,8 +696,75 @@ step_select_log_location() {
     echo ""
 }
 
+step_detect_gps() {
+    print_header "Step 7: GPS Configuration"
+    echo ""
+    echo "Basic Station can use a GPS module for precise timing and location."
+    echo ""
+    print_warning "Note: Scanning serial ports requires sudo for device access."
+    echo ""
+    echo "Scanning serial ports for GPS NMEA data..."
+    echo ""
+
+    if detect_gps_port; then
+        echo ""
+        echo -e "GPS detected on: ${GREEN}$GPS_DEVICE${NC}"
+        echo ""
+        if ! confirm "Use this GPS device?" "y"; then
+            GPS_DEVICE=""
+        fi
+    else
+        echo ""
+        print_warning "No GPS module detected on standard serial ports."
+        echo ""
+        echo "This could mean:"
+        echo "  - No GPS module is connected"
+        echo "  - Serial port is not enabled (check raspi-config)"
+        echo "  - GPS module uses a non-standard port/baud rate"
+        echo ""
+    fi
+
+    if [[ -z "$GPS_DEVICE" ]]; then
+        echo "Options:"
+        echo "  1) Disable GPS (use network time only)"
+        echo "  2) Enter GPS device path manually"
+        echo ""
+
+        local gps_choice
+        read -rp "Enter choice [1-2]: " gps_choice
+
+        case $gps_choice in
+            2)
+                echo ""
+                echo "Common GPS device paths:"
+                echo "  /dev/ttyAMA0   - Pi 5 primary UART"
+                echo "  /dev/ttyS0     - Pi 4/3 mini UART"
+                echo "  /dev/serial0   - Symlink (varies by Pi model)"
+                echo "  /dev/ttyAMA10  - Pi 5 secondary UART"
+                echo ""
+                read -rp "Enter GPS device path: " GPS_DEVICE
+                if [[ ! -c "$GPS_DEVICE" ]]; then
+                    print_warning "Warning: Device $GPS_DEVICE does not exist."
+                    if ! confirm "Continue anyway?"; then
+                        GPS_DEVICE=""
+                    fi
+                fi
+                ;;
+            *)
+                GPS_DEVICE=""
+                print_warning "GPS disabled. Gateway will use network time synchronization."
+                ;;
+        esac
+    fi
+
+    if [[ -n "$GPS_DEVICE" ]]; then
+        echo -e "GPS device: ${GREEN}$GPS_DEVICE${NC}"
+    fi
+    echo ""
+}
+
 step_create_credentials() {
-    print_header "Step 7: Creating credential files..."
+    print_header "Step 8: Creating credential files..."
 
     # Write URI file (not sensitive)
     write_file_secure "$CUPS_DIR/cups.uri" "$CUPS_URI" "644"
@@ -629,21 +774,30 @@ step_create_credentials() {
     write_secret_file "$CUPS_DIR/cups.key" "Authorization: Bearer $CUPS_KEY"
     echo "  Created: cups.key (permissions: 600)"
 
-    print_header "Step 8: Generating station.conf..."
+    print_header "Step 9: Generating station.conf..."
 
     local template="$CUPS_DIR/station.conf.template"
     if file_exists "$template"; then
+        # Format GPS_DEVICE for JSON: either false or quoted string
+        local gps_json_value
+        if [[ -n "$GPS_DEVICE" ]]; then
+            gps_json_value="\"$GPS_DEVICE\""
+        else
+            gps_json_value="false"
+        fi
+
         process_template "$template" "$CUPS_DIR/station.conf" \
             "GATEWAY_EUI=$GATEWAY_EUI" \
             "INSTALL_DIR=$SCRIPT_DIR" \
-            "LOG_FILE=$LOG_FILE"
+            "LOG_FILE=$LOG_FILE" \
+            "GPS_DEVICE=$gps_json_value"
         chmod 644 "$CUPS_DIR/station.conf"
         echo "  Created: station.conf"
     else
         print_warning "Warning: station.conf.template not found. Please configure station.conf manually."
     fi
 
-    print_header "Step 9: Setting file permissions..."
+    print_header "Step 10: Setting file permissions..."
     chmod 600 "$CUPS_DIR/cups.key" 2>/dev/null || true
     chmod 600 "$CUPS_DIR/tc.key" 2>/dev/null || true
     chmod 644 "$CUPS_DIR/cups.uri" 2>/dev/null || true
@@ -654,7 +808,7 @@ step_create_credentials() {
 
 step_setup_service() {
     echo ""
-    print_header "Step 10: Gateway startup configuration"
+    print_header "Step 11: Gateway startup configuration"
     echo ""
 
     local service_name="basicstation.service"
@@ -741,6 +895,7 @@ print_summary() {
     echo "Your gateway is configured with:"
     echo "  Region:      $TTN_REGION"
     echo "  Gateway EUI: $GATEWAY_EUI"
+    echo "  GPS device:  ${GPS_DEVICE:-disabled}"
     echo "  Config dir:  $CUPS_DIR"
     echo "  Log file:    $LOG_FILE"
     echo ""
@@ -775,6 +930,7 @@ main() {
     step_get_cups_key
     step_setup_trust_cert
     step_select_log_location
+    step_detect_gps
     step_create_credentials
     step_setup_service
 }

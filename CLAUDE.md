@@ -47,9 +47,12 @@ Automated setup wizard that:
 4. Detects Gateway EUI from SX1302 chip via SPI
 5. Collects CUPS API key securely
 6. Downloads trust certificates
-7. Creates credential files (`cups.uri`, `cups.key`, `cups.trust`)
-8. Generates `station.conf` from template with variable substitution
-9. Optionally configures systemd service
+7. Auto-detects GPS serial port by scanning for NMEA data
+8. Creates credential files (`cups.uri`, `cups.key`, `cups.trust`)
+9. Generates `station.conf` from template with variable substitution
+10. Optionally configures systemd service
+
+GPS detection scans ports `/dev/ttyAMA0`, `/dev/ttyS0`, `/dev/serial0`, `/dev/ttyAMA10` at common baud rates (9600, 4800, 19200, 38400, 57600, 115200). Pi 5 uses `/dev/ttyAMA0` for the primary UART instead of `/dev/ttyS0`.
 
 Security patterns used:
 - `set -euo pipefail` for strict error handling
@@ -60,7 +63,7 @@ Security patterns used:
 
 ### `examples/corecell/cups-ttn/`
 TTN CUPS configuration directory:
-- `station.conf.template` - Template with `{{GATEWAY_EUI}}`, `{{INSTALL_DIR}}`, `{{LOG_FILE}}` placeholders
+- `station.conf.template` - Template with `{{GATEWAY_EUI}}`, `{{INSTALL_DIR}}`, `{{LOG_FILE}}`, `{{GPS_DEVICE}}` placeholders
 - `reset_lgw.sh` - GPIO reset script with Pi 5 support (single source of truth)
 - `start-station.sh` - Launch script (`-d` flag for debug variant)
 - `rinit.sh` - Radio initialization called by station (invokes `reset_lgw.sh`)

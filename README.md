@@ -29,10 +29,11 @@ The setup script guides you through a complete gateway configuration:
 | 4 | Enter CUPS API Key from TTN Console |
 | 5 | Download TTN trust certificate |
 | 6 | Select log file location |
-| 7 | Create credential files |
-| 8 | Generate station.conf |
-| 9 | Set file permissions |
-| 10 | Configure systemd service (optional) |
+| 7 | Auto-detect GPS serial port |
+| 8 | Create credential files |
+| 9 | Generate station.conf |
+| 10 | Set file permissions |
+| 11 | Configure systemd service (optional) |
 
 ---
 
@@ -69,6 +70,21 @@ The included reset scripts automatically detect the GPIO base offset for differe
 | Raspberry Pi 5 | 571 |
 | Raspberry Pi 4/3 | 512 |
 | Older models | 0 |
+
+### GPS Serial Port Auto-Detection
+
+The setup script automatically detects GPS modules by scanning serial ports for NMEA data:
+
+| Port | Description |
+|------|-------------|
+| `/dev/ttyAMA0` | Pi 5 primary UART |
+| `/dev/ttyS0` | Pi 4/3 mini UART |
+| `/dev/serial0` | Symlink (varies by model) |
+| `/dev/ttyAMA10` | Pi 5 secondary UART |
+
+Baud rates tested: 9600, 4800, 19200, 38400, 57600, 115200
+
+If no GPS is detected, you can enter the device path manually or disable GPS (the gateway will use network time synchronization instead).
 
 ### Systemd Service
 
