@@ -39,6 +39,7 @@ CUPS_KEY=""
 LOG_FILE=""
 GPS_DEVICE=""
 MODE="setup"
+SKIP_DEPS=false
 
 #######################################
 # Source Library Files
@@ -73,12 +74,17 @@ print_usage() {
     echo "Options:"
     echo "  -h, --help       Show this help message and exit"
     echo "  -u, --uninstall  Remove installed service, credentials, and logs"
+    echo "  -v, --verbose    Enable verbose (debug) logging"
+    echo "  --skip-deps      Skip dependency checks (advanced users only)"
     echo ""
     echo "Without options, runs the interactive setup wizard."
+    echo ""
+    echo "Logs are written to: \$SCRIPT_DIR/setup.log"
     echo ""
     echo "Examples:"
     echo "  $0               Run setup wizard"
     echo "  $0 --uninstall   Remove installation"
+    echo "  $0 -v            Run setup with debug logging"
 }
 
 #######################################
@@ -93,6 +99,14 @@ parse_args() {
                 ;;
             -u|--uninstall)
                 MODE="uninstall"
+                shift
+                ;;
+            -v|--verbose)
+                CURRENT_LOG_LEVEL=$LOG_LEVEL_DEBUG
+                shift
+                ;;
+            --skip-deps)
+                SKIP_DEPS=true
                 shift
                 ;;
             *)
@@ -111,6 +125,10 @@ parse_args() {
 main() {
     parse_args "$@"
 
+    # Initialize logging (logs to $SCRIPT_DIR/setup.log)
+    init_logging "$SCRIPT_DIR/setup.log"
+    log_info "Starting setup-gateway.sh in $MODE mode"
+
     case "$MODE" in
         setup)
             run_setup
@@ -123,6 +141,8 @@ main() {
             exit 1
             ;;
     esac
+
+    log_info "Script completed successfully"
 }
 
 main "$@"

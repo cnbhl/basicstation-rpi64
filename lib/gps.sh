@@ -3,7 +3,7 @@
 # gps.sh - GPS serial port detection functions
 #
 # This file is sourced by setup-gateway.sh
-# Requires: common.sh (for print_*, confirm, GREEN, NC)
+# Requires: common.sh (for print_*, confirm, log_*, GREEN, NC)
 #
 # Expected global variables from main script:
 #   GPS_DEVICE (will be set by detect_gps_port)
@@ -66,19 +66,27 @@ try_gps_port() {
 detect_gps_port() {
     local port baud
 
+    log_info "Starting GPS port detection"
+
     for port in "${GPS_PORTS[@]}"; do
         # Skip if port doesn't exist
-        [[ ! -e "$port" ]] && continue
+        if [[ ! -e "$port" ]]; then
+            log_debug "Port $port does not exist, skipping"
+            continue
+        fi
 
         # Resolve symlinks to avoid testing the same device twice
         local real_port
         real_port=$(readlink -f "$port" 2>/dev/null || echo "$port")
+        log_debug "Testing port $port (resolves to $real_port)"
 
         for baud in "${GPS_BAUD_RATES[@]}"; do
             echo -n "  Trying $port @ ${baud}bps... "
+            log_debug "Trying $port at ${baud} baud"
 
             if try_gps_port "$port" "$baud"; then
                 echo -e "${GREEN}NMEA data found!${NC}"
+                log_info "GPS detected on $port at ${baud} baud"
                 GPS_DEVICE="$port"
                 return 0
             else
@@ -87,5 +95,6 @@ detect_gps_port() {
         done
     done
 
+    log_warning "No GPS module detected on any port"
     return 1
 }
