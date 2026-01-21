@@ -1,10 +1,13 @@
 #!/bin/bash
 #
-# LoRa Basic Station Setup Script for Raspberry Pi 5 with TTN
+# LoRa Basic Station Setup Script for Raspberry Pi with TTN
 # This script configures the gateway credentials for The Things Network
 #
+# Security: This script handles sensitive credentials (API keys).
+# Files containing secrets are created with restricted permissions.
+#
 
-set -e
+set -euo pipefail
 
 #######################################
 # Constants
@@ -25,8 +28,15 @@ readonly CHIP_ID_LOG_STUB="$CHIP_ID_DIR/log_stub.c"
 readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
 readonly RESET_LGW_SCRIPT="$CHIP_ID_DIR/reset_lgw.sh"
 
+# Global state variables (set during setup)
+TTN_REGION=""
+CUPS_URI=""
+GATEWAY_EUI=""
+CUPS_KEY=""
+LOG_FILE=""
+
 #######################################
-# Utility Functions
+# Output Functions
 #######################################
 
 print_header() {
@@ -52,54 +62,282 @@ print_banner() {
     echo ""
 }
 
+#######################################
+# Input Functions
+#######################################
+
 # Prompt for yes/no confirmation
 # Usage: confirm "Question?" && do_something
-# Returns 0 (true) for y/Y, 1 (false) for n/N or empty
+# Args: $1 = prompt, $2 = default (y/n, default: n)
+# Returns: 0 (true) for yes, 1 (false) for no
 confirm() {
     local prompt="$1"
     local default="${2:-n}"
     local response
 
-    if [ "$default" = "y" ]; then
+    if [[ "$default" == "y" ]]; then
         read -rp "$prompt (Y/n): " response
-        [ "$response" != "n" ] && [ "$response" != "N" ]
+        [[ "$response" != "n" && "$response" != "N" ]]
     else
         read -rp "$prompt (y/N): " response
-        [ "$response" = "y" ] || [ "$response" = "Y" ]
+        [[ "$response" == "y" || "$response" == "Y" ]]
     fi
 }
 
-# Validate 16-character hex string
+# Read a secret value without echoing
+# Args: $1 = variable name to set, $2 = prompt
+# Returns: 0 on success, 1 if empty
+read_secret() {
+    local -n ref=$1
+    local prompt="$2"
+
+    echo "$prompt"
+    read -rs ref
+    echo ""
+
+    [[ -n "$ref" ]]
+}
+
+# Read input with validation
+# Args: $1 = variable name, $2 = prompt, $3 = validation function
+# Returns: 0 on success
+read_validated() {
+    local -n ref=$1
+    local prompt="$2"
+    local validator="$3"
+
+    read -rp "$prompt" ref
+
+    if ! "$validator" "$ref"; then
+        return 1
+    fi
+    return 0
+}
+
+#######################################
+# Validation Functions
+#######################################
+
+# Validate 16-character hex string (Gateway EUI)
 validate_eui() {
     local eui="$1"
     [[ "$eui" =~ ^[0-9A-Fa-f]{16}$ ]]
 }
 
+# Validate string is not empty
+validate_not_empty() {
+    local value="$1"
+    [[ -n "$value" ]]
+}
+
+# Sanitize string for use in sed replacement
+# Escapes special characters: \ / & and newlines
+sanitize_for_sed() {
+    local input="$1"
+    printf '%s' "$input" | sed -e 's/[\/&]/\\&/g' -e 's/$/\\/' -e '$s/\\$//'
+}
+
 #######################################
-# Step Functions
+# File Operations (Security-focused)
 #######################################
 
-step_check_existing_credentials() {
-    if [ -f "$CUPS_DIR/cups.key" ]; then
-        print_warning "Warning: Credentials already exist in $CUPS_DIR"
-        if ! confirm "Do you want to overwrite them?"; then
-            echo "Setup cancelled."
-            exit 0
-        fi
+# Write content to file with secure permissions (atomic)
+# Args: $1 = file path, $2 = content, $3 = permissions (default: 600)
+write_file_secure() {
+    local file_path="$1"
+    local content="$2"
+    local permissions="${3:-600}"
+    local temp_file
+
+    temp_file=$(mktemp)
+
+    # Set restrictive permissions before writing content
+    chmod "$permissions" "$temp_file"
+
+    # Write content using printf to avoid process listing
+    printf '%s\n' "$content" > "$temp_file"
+
+    # Atomic move to final location
+    mv "$temp_file" "$file_path"
+}
+
+# Write secret to file (extra secure - no echo)
+# Args: $1 = file path, $2 = content
+write_secret_file() {
+    local file_path="$1"
+    local content="$2"
+
+    # Create file with restricted permissions first
+    local temp_file
+    temp_file=$(mktemp)
+    chmod 600 "$temp_file"
+
+    # Use here-string to avoid secret in process listing
+    cat > "$temp_file" <<< "$content"
+
+    mv "$temp_file" "$file_path"
+}
+
+# Copy file with permission preservation
+# Args: $1 = source, $2 = destination, $3 = permissions (optional)
+copy_file() {
+    local src="$1"
+    local dst="$2"
+    local permissions="${3:-}"
+
+    if [[ ! -f "$src" ]]; then
+        print_error "Source file not found: $src"
+        return 1
+    fi
+
+    cp "$src" "$dst"
+
+    if [[ -n "$permissions" ]]; then
+        chmod "$permissions" "$dst"
     fi
 }
 
+#######################################
+# System Check Functions
+#######################################
+
+# Check if a command exists
+# Args: $1 = command name
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Check if file exists and is readable
+# Args: $1 = file path
+file_exists() {
+    [[ -f "$1" && -r "$1" ]]
+}
+
+# Check if file exists and is executable
+# Args: $1 = file path
+file_executable() {
+    [[ -x "$1" ]]
+}
+
+# Check if directory exists
+# Args: $1 = directory path
+dir_exists() {
+    [[ -d "$1" ]]
+}
+
+# Check if SPI is available
+check_spi_available() {
+    if [[ ! -e /dev/spidev0.0 ]]; then
+        print_error "SPI device not found at /dev/spidev0.0"
+        echo "Please enable SPI using: sudo raspi-config"
+        echo "Navigate to: Interface Options > SPI > Enable"
+        return 1
+    fi
+    return 0
+}
+
+#######################################
+# Service Management Functions
+#######################################
+
+# Check if systemd service is active
+# Args: $1 = service name
+service_is_active() {
+    local service="$1"
+    systemctl is-active --quiet "$service" 2>/dev/null
+}
+
+# Check if systemd service is enabled
+# Args: $1 = service name
+service_is_enabled() {
+    local service="$1"
+    systemctl is-enabled --quiet "$service" 2>/dev/null
+}
+
+# Start a systemd service with status check
+# Args: $1 = service name
+# Returns: 0 on success, 1 on failure
+service_start() {
+    local service="$1"
+
+    sudo systemctl start "$service"
+    sleep 2
+
+    if service_is_active "$service"; then
+        print_success "Service $service started successfully!"
+        return 0
+    else
+        print_warning "Service $service may have failed to start."
+        echo "  Check status: sudo systemctl status $service"
+        echo "  View logs: sudo journalctl -u $service -f"
+        return 1
+    fi
+}
+
+# Restart a systemd service with status check
+# Args: $1 = service name
+service_restart() {
+    local service="$1"
+
+    sudo systemctl restart "$service"
+    sleep 2
+
+    if service_is_active "$service"; then
+        print_success "Service $service restarted successfully!"
+        return 0
+    else
+        print_warning "Service $service may have failed to restart."
+        echo "  Check status: sudo systemctl status $service"
+        echo "  View logs: sudo journalctl -u $service -f"
+        return 1
+    fi
+}
+
+#######################################
+# Template Processing
+#######################################
+
+# Process a template file with variable substitution
+# Args: $1 = template file, $2 = output file, $3... = "KEY=VALUE" pairs
+process_template() {
+    local template="$1"
+    local output="$2"
+    shift 2
+
+    if [[ ! -f "$template" ]]; then
+        print_error "Template not found: $template"
+        return 1
+    fi
+
+    local content
+    content=$(cat "$template")
+
+    # Process each KEY=VALUE pair
+    for pair in "$@"; do
+        local key="${pair%%=*}"
+        local value="${pair#*=}"
+        local safe_value
+        safe_value=$(sanitize_for_sed "$value")
+        content=$(printf '%s' "$content" | sed "s|{{${key}}}|${safe_value}|g")
+    done
+
+    printf '%s\n' "$content" > "$output"
+}
+
+#######################################
+# Build Functions
+#######################################
+
 build_chip_id() {
-    # Build chip_id tool using the libloragw from the station build
     local lgw_inc="$BUILD_DIR/include/lgw"
     local lgw_lib="$BUILD_DIR/lib"
 
-    if [ ! -d "$lgw_inc" ] || [ ! -f "$lgw_lib/liblgw1302.a" ]; then
+    if [[ ! -d "$lgw_inc" ]] || [[ ! -f "$lgw_lib/liblgw1302.a" ]]; then
         print_warning "Cannot build chip_id: libloragw not found (station build required first)"
         return 1
     fi
 
-    if [ ! -f "$CHIP_ID_SOURCE" ]; then
+    if [[ ! -f "$CHIP_ID_SOURCE" ]]; then
         print_warning "Cannot build chip_id: source file not found at $CHIP_ID_SOURCE"
         return 1
     fi
@@ -107,6 +345,7 @@ build_chip_id() {
     echo "  Building chip_id tool..."
     local build_err
     build_err=$(mktemp)
+
     if gcc -std=gnu11 -O2 \
         -I"$lgw_inc" \
         "$CHIP_ID_SOURCE" "$CHIP_ID_LOG_STUB" \
@@ -117,12 +356,26 @@ build_chip_id() {
         return 0
     else
         print_warning "  Failed to build chip_id (non-critical, manual EUI entry available)"
-        if [ -s "$build_err" ]; then
+        if [[ -s "$build_err" ]]; then
             echo "  Build error:"
             sed 's/^/    /' "$build_err"
         fi
         rm -f "$build_err"
         return 1
+    fi
+}
+
+#######################################
+# Setup Step Functions
+#######################################
+
+step_check_existing_credentials() {
+    if file_exists "$CUPS_DIR/cups.key"; then
+        print_warning "Warning: Credentials already exist in $CUPS_DIR"
+        if ! confirm "Do you want to overwrite them?"; then
+            echo "Setup cancelled."
+            exit 0
+        fi
     fi
 }
 
@@ -138,13 +391,13 @@ step_build_station() {
     echo "  - Build the chip_id tool for EUI detection"
     echo ""
 
-    if [ -f "$STATION_BINARY" ]; then
+    if file_exists "$STATION_BINARY"; then
         print_warning "Note: A station binary already exists."
         if ! confirm "Do you want to rebuild?"; then
             print_success "Skipping build, using existing binary."
             # Still try to build chip_id if it doesn't exist
-            if [ ! -x "$CHIP_ID_TOOL" ]; then
-                build_chip_id
+            if ! file_executable "$CHIP_ID_TOOL"; then
+                build_chip_id || true
             fi
             echo ""
             return 0
@@ -165,7 +418,7 @@ step_build_station() {
     if make platform=corecell variant=std; then
         echo ""
         print_success "Station build completed successfully."
-        build_chip_id
+        build_chip_id || true
     else
         print_error "Build failed. Please check the error messages above."
         echo "You can try building manually with: make platform=corecell variant=std"
@@ -180,6 +433,8 @@ step_select_region() {
     echo "  2) NAM1 - North America (nam1.cloud.thethings.network)"
     echo "  3) AU1  - Australia (au1.cloud.thethings.network)"
     echo ""
+
+    local region_choice
     read -rp "Enter region number [1-3]: " region_choice
 
     case $region_choice in
@@ -187,7 +442,7 @@ step_select_region() {
         2) TTN_REGION="nam1" ;;
         3) TTN_REGION="au1" ;;
         *)
-            print_error "Invalid selection. Defaulting to EU1."
+            print_warning "Invalid selection. Defaulting to EU1."
             TTN_REGION="eu1"
             ;;
     esac
@@ -208,24 +463,21 @@ step_detect_eui() {
     echo "Attempting to read EUI from SX1302 chip..."
     echo ""
 
-    if [ -x "$CHIP_ID_TOOL" ]; then
+    if file_executable "$CHIP_ID_TOOL"; then
         # chip_id requires reset_lgw.sh in the same directory
-        # Copy it to the build/bin directory if not present
         local chip_id_dir
         chip_id_dir="$(dirname "$CHIP_ID_TOOL")"
-        if [ ! -f "$chip_id_dir/reset_lgw.sh" ] && [ -f "$RESET_LGW_SCRIPT" ]; then
-            cp "$RESET_LGW_SCRIPT" "$chip_id_dir/"
-            chmod +x "$chip_id_dir/reset_lgw.sh"
+
+        if [[ ! -f "$chip_id_dir/reset_lgw.sh" ]] && file_exists "$RESET_LGW_SCRIPT"; then
+            copy_file "$RESET_LGW_SCRIPT" "$chip_id_dir/reset_lgw.sh" "755"
         fi
 
-        cd "$chip_id_dir"
         local chip_output
-        chip_output=$(sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
-        cd "$SCRIPT_DIR"
+        chip_output=$(cd "$chip_id_dir" && sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
 
-        detected_eui=$(echo "$chip_output" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]')
+        detected_eui=$(printf '%s' "$chip_output" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]')
 
-        if [ -n "$detected_eui" ] && validate_eui "$detected_eui"; then
+        if [[ -n "$detected_eui" ]] && validate_eui "$detected_eui"; then
             echo -e "Detected EUI from SX1302 chip: ${GREEN}$detected_eui${NC}"
             echo ""
             if confirm "Use this EUI?" "y"; then
@@ -235,7 +487,7 @@ step_detect_eui() {
             detected_eui=""
         else
             print_warning "Could not auto-detect EUI from SX1302 chip."
-            if [ -n "$chip_output" ]; then
+            if [[ -n "$chip_output" ]]; then
                 echo "chip_id output: $chip_output"
             fi
         fi
@@ -259,7 +511,7 @@ step_detect_eui() {
         fi
     fi
 
-    GATEWAY_EUI=$(echo "$GATEWAY_EUI" | tr '[:lower:]' '[:upper:]')
+    GATEWAY_EUI=$(printf '%s' "$GATEWAY_EUI" | tr '[:lower:]' '[:upper:]')
 }
 
 step_show_registration_instructions() {
@@ -298,11 +550,8 @@ step_get_cups_key() {
     echo ""
     print_warning "Note: The key is only shown once - copy it now!"
     echo ""
-    echo "Paste your API key (it will not be displayed):"
-    read -rs CUPS_KEY
-    echo ""
 
-    if [ -z "$CUPS_KEY" ]; then
+    if ! read_secret CUPS_KEY "Paste your API key (it will not be displayed):"; then
         print_error "Error: API key cannot be empty."
         exit 1
     fi
@@ -319,17 +568,22 @@ step_setup_trust_cert() {
 
     local trust_cert="$CUPS_DIR/cups.trust"
 
-    if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-        cp /etc/ssl/certs/ca-certificates.crt "$trust_cert"
+    if file_exists /etc/ssl/certs/ca-certificates.crt; then
+        copy_file /etc/ssl/certs/ca-certificates.crt "$trust_cert" "644"
         print_success "Trust certificate installed (system CA bundle)."
     else
         echo "System CA bundle not found, downloading Let's Encrypt root..."
-        curl -sf https://letsencrypt.org/certs/isrgrootx1.pem -o "$trust_cert"
-        if [ ! -f "$trust_cert" ] || [ ! -s "$trust_cert" ]; then
-            print_error "Error: Could not obtain trust certificate."
+        if curl -sf https://letsencrypt.org/certs/isrgrootx1.pem -o "$trust_cert"; then
+            chmod 644 "$trust_cert"
+            if [[ ! -s "$trust_cert" ]]; then
+                print_error "Error: Downloaded certificate is empty."
+                exit 1
+            fi
+            print_success "Trust certificate downloaded."
+        else
+            print_error "Error: Could not download trust certificate."
             exit 1
         fi
-        print_success "Trust certificate downloaded."
     fi
     echo ""
 }
@@ -339,19 +593,19 @@ step_select_log_location() {
     echo "  1) Local directory ($CUPS_DIR/station.log)"
     echo "  2) System log (/var/log/station.log) - requires sudo"
     echo ""
+
+    local log_choice
     read -rp "Enter choice [1-2]: " log_choice
 
     case $log_choice in
         2)
             LOG_FILE="/var/log/station.log"
-            print_warning "Note: You will need to create the log file with proper permissions:"
-            print_warning "  sudo touch /var/log/station.log"
-            print_warning "  sudo chown $USER:$USER /var/log/station.log"
+            print_warning "Note: Creating system log file with proper permissions."
             if confirm "Create log file now with sudo?" "y"; then
-                sudo touch /var/log/station.log
-                sudo chown "$USER:$USER" /var/log/station.log
-                chmod 644 /var/log/station.log
-                print_success "Log file created: /var/log/station.log"
+                sudo touch "$LOG_FILE"
+                sudo chown "${USER}:${USER}" "$LOG_FILE"
+                sudo chmod 644 "$LOG_FILE"
+                print_success "Log file created: $LOG_FILE"
             fi
             ;;
         *)
@@ -367,19 +621,23 @@ step_select_log_location() {
 step_create_credentials() {
     print_header "Step 7: Creating credential files..."
 
-    echo "$CUPS_URI" > "$CUPS_DIR/cups.uri"
+    # Write URI file (not sensitive)
+    write_file_secure "$CUPS_DIR/cups.uri" "$CUPS_URI" "644"
     echo "  Created: cups.uri"
 
-    echo "Authorization: Bearer $CUPS_KEY" > "$CUPS_DIR/cups.key"
-    echo "  Created: cups.key"
+    # Write API key file (sensitive - use secure write)
+    write_secret_file "$CUPS_DIR/cups.key" "Authorization: Bearer $CUPS_KEY"
+    echo "  Created: cups.key (permissions: 600)"
 
     print_header "Step 8: Generating station.conf..."
 
-    if [ -f "$CUPS_DIR/station.conf.template" ]; then
-        sed -e "s|{{GATEWAY_EUI}}|$GATEWAY_EUI|g" \
-            -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
-            -e "s|{{LOG_FILE}}|$LOG_FILE|g" \
-            "$CUPS_DIR/station.conf.template" > "$CUPS_DIR/station.conf"
+    local template="$CUPS_DIR/station.conf.template"
+    if file_exists "$template"; then
+        process_template "$template" "$CUPS_DIR/station.conf" \
+            "GATEWAY_EUI=$GATEWAY_EUI" \
+            "INSTALL_DIR=$SCRIPT_DIR" \
+            "LOG_FILE=$LOG_FILE"
+        chmod 644 "$CUPS_DIR/station.conf"
         echo "  Created: station.conf"
     else
         print_warning "Warning: station.conf.template not found. Please configure station.conf manually."
@@ -399,9 +657,10 @@ step_setup_service() {
     print_header "Step 10: Gateway startup configuration"
     echo ""
 
-    # Check if service is already running (for later reload/restart)
+    local service_name="basicstation.service"
     local service_was_active=false
-    if systemctl is-active --quiet basicstation.service 2>/dev/null; then
+
+    if service_is_active "$service_name"; then
         service_was_active=true
     fi
 
@@ -413,9 +672,11 @@ step_setup_service() {
     echo ""
     print_success "Setting up systemd service..."
 
-    local service_file="/etc/systemd/system/basicstation.service"
+    local service_file="/etc/systemd/system/$service_name"
 
-    sudo tee "$service_file" > /dev/null << EOF
+    # Create service file content
+    local service_content
+    read -r -d '' service_content << EOF || true
 [Unit]
 Description=LoRa Basics Station (SX1302/Corecell) for TTN (CUPS)
 After=network-online.target
@@ -449,38 +710,24 @@ SyslogIdentifier=basicstation
 WantedBy=multi-user.target
 EOF
 
+    # Write service file via sudo
+    printf '%s\n' "$service_content" | sudo tee "$service_file" > /dev/null
     echo "  Created: $service_file"
 
     sudo systemctl daemon-reload
-    sudo systemctl enable basicstation.service
+    sudo systemctl enable "$service_name"
     echo "  Service enabled."
 
     echo ""
-    if [ "$service_was_active" = true ]; then
+    if [[ "$service_was_active" == true ]]; then
         print_warning "Service was already running. Restarting with new configuration..."
-        sudo systemctl restart basicstation.service
-        sleep 2
-        if systemctl is-active --quiet basicstation.service; then
-            print_success "Service restarted successfully!"
-        else
-            print_warning "Service may have failed to restart. Check status with:"
-            echo "  sudo systemctl status basicstation.service"
-            echo "  sudo journalctl -u basicstation.service -f"
-        fi
+        service_restart "$service_name" || true
     elif confirm "Do you want to start the service now?" "y"; then
-        sudo systemctl start basicstation.service
-        sleep 2
-        if systemctl is-active --quiet basicstation.service; then
-            print_success "Service started successfully!"
-        else
-            print_warning "Service may have failed to start. Check status with:"
-            echo "  sudo systemctl status basicstation.service"
-            echo "  sudo journalctl -u basicstation.service -f"
-        fi
+        service_start "$service_name" || true
     else
         echo ""
         echo "To start the service later, run:"
-        print_warning "  sudo systemctl start basicstation.service"
+        print_warning "  sudo systemctl start $service_name"
     fi
 
     print_summary "service"
@@ -498,7 +745,7 @@ print_summary() {
     echo "  Log file:    $LOG_FILE"
     echo ""
 
-    if [ "$mode" = "service" ]; then
+    if [[ "$mode" == "service" ]]; then
         echo "Useful commands:"
         print_warning "  sudo systemctl status basicstation.service  - Check service status"
         print_warning "  sudo systemctl stop basicstation.service   - Stop the service"
