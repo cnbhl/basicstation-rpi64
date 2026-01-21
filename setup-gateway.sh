@@ -26,7 +26,7 @@ readonly CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
 readonly CHIP_ID_SOURCE="$CHIP_ID_DIR/chip_id.c"
 readonly CHIP_ID_LOG_STUB="$CHIP_ID_DIR/log_stub.c"
 readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
-readonly RESET_LGW_SCRIPT="$CHIP_ID_DIR/reset_lgw.sh"
+readonly RESET_LGW_SCRIPT="$CUPS_DIR/reset_lgw.sh"
 
 # Global state variables (set during setup)
 TTN_REGION=""
