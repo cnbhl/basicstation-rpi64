@@ -1,6 +1,9 @@
 --- Revised 3-Clause BSD License ---
 Copyright Semtech Corporation 2022. All rights reserved.
 
+Fork additions (setup-gateway.sh, lib/, tools/chip_id/, examples/corecell/cups-ttn/)
+are also provided under this license without warranty of any kind.
+
 Redistribution and use in source and binary forms, with or without modification,
 are permitted provided that the following conditions are met:
 
