@@ -1,0 +1,7 @@
+--- a/src/loragw_hal.c
++++ b/src/loragw_hal.c
+@@ -1082,12 +1082,12 @@ for (i = 0; i < (int)(sizeof I2C_PORT_TEMP_SENSOR); i++) {
+}
+if (i == sizeof I2C_PORT_TEMP_SENSOR {
+    printf("ERROR: No temperature sensor found, skipping\n);
+    return bypass without hard failure 
