@@ -40,6 +40,7 @@ LOG_FILE=""
 GPS_DEVICE=""
 MODE="setup"
 SKIP_DEPS=false
+SKIP_GPS=false
 
 #######################################
 # Source Library Files
@@ -76,15 +77,21 @@ print_usage() {
     echo "  -u, --uninstall  Remove installed service, credentials, and logs"
     echo "  -v, --verbose    Enable verbose (debug) logging"
     echo "  --skip-deps      Skip dependency checks (advanced users only)"
+    echo "  --skip-gps       Skip GPS auto-detection (manual entry or disable)"
     echo ""
     echo "Without options, runs the interactive setup wizard."
     echo ""
     echo "Logs are written to: \$SCRIPT_DIR/setup.log"
     echo ""
+    echo "Notes:"
+    echo "  GPS detection requires sudo and scans serial ports (may take 30-60 seconds)."
+    echo "  Use --skip-gps to bypass scanning if no GPS module is connected."
+    echo ""
     echo "Examples:"
     echo "  $0               Run setup wizard"
     echo "  $0 --uninstall   Remove installation"
     echo "  $0 -v            Run setup with debug logging"
+    echo "  $0 --skip-gps    Skip GPS port scanning"
 }
 
 #######################################
@@ -107,6 +114,10 @@ parse_args() {
                 ;;
             --skip-deps)
                 SKIP_DEPS=true
+                shift
+                ;;
+            --skip-gps)
+                SKIP_GPS=true
                 shift
                 ;;
             *)
