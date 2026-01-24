@@ -412,12 +412,12 @@ step_create_credentials() {
 
     local template="$CUPS_DIR/station.conf.template"
     if file_exists "$template"; then
-        # Format GPS_DEVICE for JSON: either false or quoted string
+        # Format GPS_DEVICE for JSON: quoted string (empty string disables GPS)
         local gps_json_value
         if [[ -n "$GPS_DEVICE" ]]; then
             gps_json_value="\"$GPS_DEVICE\""
         else
-            gps_json_value="false"
+            gps_json_value="\"\""
         fi
 
         process_template "$template" "$CUPS_DIR/station.conf" \
