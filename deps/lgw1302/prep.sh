@@ -50,4 +50,10 @@ if [[ ! -d platform-${platform} ]]; then
         echo "Applying ${lgwversion}-${platform}.patch ..."
         git apply ../${lgwversion}-${platform}.patch
     fi
+
+    # Apply additional patches (e.g., bypass-temp-sensor.patch for boards without temp sensor)
+    if [ -f ../bypass-temp-sensor.patch ]; then
+        echo "Applying bypass-temp-sensor.patch ..."
+        git apply ../bypass-temp-sensor.patch
+    fi
 fi

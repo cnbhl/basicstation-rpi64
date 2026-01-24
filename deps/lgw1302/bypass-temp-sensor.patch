@@ -1,0 +1,13 @@
+--- a/libloragw/src/loragw_hal.c
++++ b/libloragw/src/loragw_hal.c
+@@ -1115,8 +1115,8 @@ int lgw_start(void) {
+             }
+         }
+         if (i == sizeof I2C_PORT_TEMP_SENSOR) {
+-            ERROR_PRINTF("no temperature sensor found.\n");
+-            return LGW_HAL_ERROR;
++            INFO_PRINTF("no temperature sensor found, temperature compensation disabled.\n");
++            /* Continue without temperature sensor - some boards like Dragino PG1302 don't have one */
+         }
+
+         /* Configure ADC AD5338R for full duplex (CN490 reference design) */
