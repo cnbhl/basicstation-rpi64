@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.6-cnbhl.4 - 2025-01-24
+
+* deps: Extended required dependency checks (gcc, make, curl, sed, grep, tr, cat, cp, mv, chmod, mktemp, tee, stty, timeout, sudo, systemctl)
+* security: Atomic temp file writes with restrictive umask (077)
+* security: Cleanup trap on EXIT for orphaned temp files
+* feature: `--skip-gps` flag to bypass GPS auto-detection
+* feature: Privilege detection with `is_root()`, `check_sudo_available()`, `run_privileged()`, `require_privilege()`
+* fix: GPS detection avoids duplicate scans via symlink tracking
+
 ## 2.0.6-cnbhl.3 - 2025-01-21
 
 * security: Use `set -euo pipefail` for stricter error handling

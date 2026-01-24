@@ -45,6 +45,7 @@ Main entry point that sources modular libraries from `lib/`. Supports:
 - `--uninstall` - Remove installation
 - `-v, --verbose` - Enable debug logging
 - `--skip-deps` - Skip dependency checks
+- `--skip-gps` - Skip GPS auto-detection
 
 ### `lib/` - Modular Library Structure
 
