@@ -193,6 +193,7 @@ Format: `2.0.6-cnbhl.N` or `2.0.6-cnbhl.Na`
 
 - **Main release**: `2.0.6-cnbhl.N` where N is an incrementing natural number (1, 2, 3...)
 - **Hotfix**: `2.0.6-cnbhl.Na` where a is an incrementing letter per main release (a, b, c...)
-- **No "v" prefix** in tags or release names
+- **Tag**: No "v" prefix (e.g., `2.0.6-cnbhl.5`)
+- **Release title**: `Release 2.0.6-cnbhl.N` (prefix with "Release ")
 
-Examples: `2.0.6-cnbhl.5`, `2.0.6-cnbhl.5a`, `2.0.6-cnbhl.5b`, `2.0.6-cnbhl.6`
+Examples: Tag `2.0.6-cnbhl.5` → Title "Release 2.0.6-cnbhl.5"
