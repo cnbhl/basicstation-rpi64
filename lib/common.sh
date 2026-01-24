@@ -279,18 +279,33 @@ check_i2c_available() {
 # Required dependencies for setup script
 # Format: "command:package:purpose"
 readonly REQUIRED_DEPS=(
-    "curl:curl:downloading certificates"
+    # Build tools
     "gcc:gcc:compiling station and chip_id"
     "make:make:building station"
+    # Network tools
+    "curl:curl:downloading certificates"
+    # Text processing
     "sed:sed:template processing"
+    "grep:grep:text pattern matching"
+    "tr:coreutils:character translation"
+    "cat:coreutils:file concatenation"
+    # File operations
+    "cp:coreutils:copying files"
+    "mv:coreutils:moving files"
+    "chmod:coreutils:setting file permissions"
+    "mktemp:coreutils:creating temporary files"
+    "tee:coreutils:writing to files"
+    # Serial/GPS
     "stty:coreutils:GPS serial port configuration"
-    "grep:grep:text processing"
     "timeout:coreutils:GPS detection timeouts"
+    # System
+    "sudo:sudo:elevated privileges for hardware access"
+    "systemctl:systemd:service management"
 )
 
 # Optional dependencies (warn if missing but don't fail)
 readonly OPTIONAL_DEPS=(
-    "systemctl:systemd:service management"
+    # None currently - all required deps moved above
 )
 
 # Check if a single dependency is available
