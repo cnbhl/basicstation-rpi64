@@ -613,6 +613,7 @@ ExecStart=$STATION_BINARY --home $CUPS_DIR
 
 Restart=on-failure
 RestartSec=5
+SuccessExitStatus=143
 
 # Security hardening
 NoNewPrivileges=true
