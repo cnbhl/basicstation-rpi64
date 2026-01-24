@@ -156,43 +156,4 @@ main() {
     log_info "Script completed successfully"
 }
 
-# Parse command-line arguments
-parse_args() {
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -h|--help)
-                print_usage
-                exit 0
-                ;;
-            -u|--uninstall)
-                MODE="uninstall"
-                shift
-                ;;
-            *)
-                print_error "Unknown option: $1"
-                echo ""
-                print_usage
-                exit 1
-                ;;
-        esac
-    done
-}
-
-main() {
-    parse_args "$@"
-
-    case "$MODE" in
-        setup)
-            run_setup
-            ;;
-        uninstall)
-            run_uninstall
-            ;;
-        *)
-            print_error "Unknown mode: $MODE"
-            exit 1
-            ;;
-    esac
-}
-
 main "$@"
