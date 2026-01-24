@@ -53,6 +53,11 @@ Core utilities including:
 - **Output functions**: `print_header()`, `print_success()`, `print_warning()`, `print_error()`, `print_banner()`
 - **Input functions**: `confirm()`, `read_secret()`, `read_validated()`
 - **System checks**: `command_exists()`, `file_exists()`, `file_executable()`, `dir_exists()`, `check_spi_available()`, `check_i2c_available()`
+- **Privilege detection**:
+  - `is_root()` - Check if running as root (EUID=0)
+  - `check_sudo_available()` - Check sudo availability, sets `HAVE_SUDO` and `IS_ROOT` flags
+  - `run_privileged(cmd...)` - Run command with sudo if not root
+  - `require_privilege(purpose)` - Check privileges with helpful error message
 - **Logging system**:
   - `init_logging(path)` - Initialize log file with timestamp header
   - `log_debug(msg)`, `log_info(msg)`, `log_warning(msg)`, `log_error(msg)`
@@ -60,8 +65,8 @@ Core utilities including:
   - Log levels: `LOG_LEVEL_DEBUG`, `LOG_LEVEL_INFO`, `LOG_LEVEL_WARNING`, `LOG_LEVEL_ERROR`
 - **Dependency validation**:
   - `check_dependency(cmd, package, purpose)` - Check single dependency
-  - `check_required_dependencies()` - Check all required deps (curl, gcc, make, sed, stty, grep, timeout)
-  - `check_optional_dependencies()` - Check optional deps (systemctl)
+  - `check_required_dependencies()` - Check all required deps (gcc, make, curl, sed, grep, tr, cat, cp, mv, chmod, mktemp, tee, stty, timeout, sudo, systemctl)
+  - `check_optional_dependencies()` - Check optional deps
   - `check_all_dependencies(mode)` - Run all checks ("strict" or "warn")
 
 #### `lib/validation.sh`

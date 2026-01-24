@@ -222,6 +222,94 @@ dir_exists() {
     [[ -d "$1" ]]
 }
 
+#######################################
+# Privilege / Sudo Detection
+#######################################
+
+# Global flag set by check_sudo_available()
+HAVE_SUDO=false
+IS_ROOT=false
+
+# Check if running as root
+# Returns: 0 if root, 1 otherwise
+is_root() {
+    [[ $EUID -eq 0 ]]
+}
+
+# Check if sudo is available and user can use it
+# Sets global HAVE_SUDO and IS_ROOT flags
+# Returns: 0 if root or sudo available, 1 otherwise
+check_sudo_available() {
+    # Check if already root
+    if is_root; then
+        IS_ROOT=true
+        HAVE_SUDO=true
+        log_debug "Running as root (EUID=0)"
+        return 0
+    fi
+
+    # Check if sudo command exists
+    if ! command_exists sudo; then
+        HAVE_SUDO=false
+        print_error "sudo command not found"
+        echo ""
+        echo "This script requires elevated privileges for:"
+        echo "  - Hardware access (SPI, I2C, GPIO)"
+        echo "  - Serial port configuration (GPS)"
+        echo "  - System service management"
+        echo ""
+        echo "Please install sudo or run as root:"
+        echo "  su -c '$0'"
+        echo ""
+        return 1
+    fi
+
+    # Test if user can use sudo (non-interactive check)
+    if sudo -n true 2>/dev/null; then
+        HAVE_SUDO=true
+        log_debug "sudo available (passwordless)"
+        return 0
+    fi
+
+    # sudo exists but may require password - that's OK
+    HAVE_SUDO=true
+    log_debug "sudo available (may require password)"
+    return 0
+}
+
+# Run a command with sudo if not root
+# Args: $@ = command and arguments
+# Returns: command exit code
+run_privileged() {
+    if is_root; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
+# Check sudo and provide helpful message on failure
+# Args: $1 = description of what needs sudo
+# Returns: 0 if sudo available, 1 with message otherwise
+require_privilege() {
+    local purpose="${1:-perform this operation}"
+
+    if is_root || [[ "$HAVE_SUDO" == true ]]; then
+        return 0
+    fi
+
+    print_error "Elevated privileges required to $purpose"
+    echo ""
+    echo "Please either:"
+    echo "  1. Run this script with sudo:"
+    echo "     sudo $0"
+    echo ""
+    echo "  2. Or run as root:"
+    echo "     su -c '$0'"
+    echo ""
+    return 1
+}
+
 # Check if SPI is available
 check_spi_available() {
     if [[ ! -e /dev/spidev0.0 ]]; then
@@ -279,18 +367,33 @@ check_i2c_available() {
 # Required dependencies for setup script
 # Format: "command:package:purpose"
 readonly REQUIRED_DEPS=(
-    "curl:curl:downloading certificates"
+    # Build tools
     "gcc:gcc:compiling station and chip_id"
     "make:make:building station"
+    # Network tools
+    "curl:curl:downloading certificates"
+    # Text processing
     "sed:sed:template processing"
+    "grep:grep:text pattern matching"
+    "tr:coreutils:character translation"
+    "cat:coreutils:file concatenation"
+    # File operations
+    "cp:coreutils:copying files"
+    "mv:coreutils:moving files"
+    "chmod:coreutils:setting file permissions"
+    "mktemp:coreutils:creating temporary files"
+    "tee:coreutils:writing to files"
+    # Serial/GPS
     "stty:coreutils:GPS serial port configuration"
-    "grep:grep:text processing"
     "timeout:coreutils:GPS detection timeouts"
+    # System
+    "sudo:sudo:elevated privileges for hardware access"
+    "systemctl:systemd:service management"
 )
 
 # Optional dependencies (warn if missing but don't fail)
 readonly OPTIONAL_DEPS=(
-    "systemctl:systemd:service management"
+    # None currently - all required deps moved above
 )
 
 # Check if a single dependency is available
@@ -365,6 +468,19 @@ check_all_dependencies() {
 
     echo "Checking system dependencies..."
     log_info "Running dependency checks (mode: $mode)"
+
+    # Check sudo/root privileges first
+    if ! check_sudo_available; then
+        if [[ "$mode" == "strict" ]]; then
+            result=1
+        fi
+    else
+        if is_root; then
+            log_info "Running as root"
+        else
+            log_info "sudo available for elevated operations"
+        fi
+    fi
 
     # Check required dependencies
     if ! check_required_dependencies; then

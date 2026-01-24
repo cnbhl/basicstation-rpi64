@@ -320,27 +320,42 @@ step_detect_gps() {
     echo ""
     echo "Basic Station can use a GPS module for precise timing and location."
     echo ""
-    print_warning "Note: Scanning serial ports requires sudo for device access."
-    echo ""
-    echo "Scanning serial ports for GPS NMEA data..."
-    echo ""
 
-    if detect_gps_port; then
+    # Check if GPS scanning was skipped via --skip-gps flag
+    if [[ "$SKIP_GPS" == true ]]; then
+        log_info "GPS auto-detection skipped (--skip-gps flag)"
+        print_warning "GPS auto-detection skipped (--skip-gps flag)."
         echo ""
-        echo -e "GPS detected on: ${GREEN}$GPS_DEVICE${NC}"
-        echo ""
-        if ! confirm "Use this GPS device?" "y"; then
-            GPS_DEVICE=""
-        fi
     else
+        print_warning "Note: Scanning serial ports requires sudo and may take 30-60 seconds."
         echo ""
-        print_warning "No GPS module detected on standard serial ports."
-        echo ""
-        echo "This could mean:"
-        echo "  - No GPS module is connected"
-        echo "  - Serial port is not enabled (check raspi-config)"
-        echo "  - GPS module uses a non-standard port/baud rate"
-        echo ""
+
+        if confirm "Scan for GPS module?" "y"; then
+            echo ""
+            echo "Scanning serial ports for GPS NMEA data..."
+            echo ""
+
+            if detect_gps_port; then
+                echo ""
+                echo -e "GPS detected on: ${GREEN}$GPS_DEVICE${NC}"
+                echo ""
+                if ! confirm "Use this GPS device?" "y"; then
+                    GPS_DEVICE=""
+                fi
+            else
+                echo ""
+                print_warning "No GPS module detected on standard serial ports."
+                echo ""
+                echo "This could mean:"
+                echo "  - No GPS module is connected"
+                echo "  - Serial port is not enabled (check raspi-config)"
+                echo "  - GPS module uses a non-standard port/baud rate"
+                echo ""
+            fi
+        else
+            log_info "User skipped GPS scan"
+            echo ""
+        fi
     fi
 
     if [[ -z "$GPS_DEVICE" ]]; then
