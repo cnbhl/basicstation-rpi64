@@ -186,3 +186,13 @@ Platform/variant configuration in `setup.gmk`:
 - `platform=corecell` selects SX1302 HAL (`deps/lgw1302`)
 - Auto-detects ARM32/ARM64 for native builds
 - Cross-compilation via `$HOME/toolchain-corecell/` if available
+
+## Versioning Convention
+
+Format: `2.0.6-cnbhl.N` or `2.0.6-cnbhl.Na`
+
+- **Main release**: `2.0.6-cnbhl.N` where N is an incrementing natural number (1, 2, 3...)
+- **Hotfix**: `2.0.6-cnbhl.Na` where a is an incrementing letter per main release (a, b, c...)
+- **No "v" prefix** in tags or release names
+
+Examples: `2.0.6-cnbhl.5`, `2.0.6-cnbhl.5a`, `2.0.6-cnbhl.5b`, `2.0.6-cnbhl.6`

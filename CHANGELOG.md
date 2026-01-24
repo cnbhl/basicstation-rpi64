@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.6-cnbhl.4 - 2025-01-24
+## 2.0.6-cnbhl.5 - 2025-01-24
 
 * deps: Extended required dependency checks (gcc, make, curl, sed, grep, tr, cat, cp, mv, chmod, mktemp, tee, stty, timeout, sudo, systemctl)
 * security: Atomic temp file writes with restrictive umask (077)
