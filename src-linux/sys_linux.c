@@ -1079,6 +1079,9 @@ static void startupMaster2 (tmr_t* tmr) {
     rt_addFeature("prod");  // certain development/test/debug features not accepted
 #endif
     rt_addFeature("dutyconf");  // supports duty_cycle_enabled in router_config
+#if !defined(CFG_nogps)
+    rt_addFeature("gps-ctrl");  // LNS can control GPS enable/disable
+#endif
     sys_enableCmdFIFO(makeFilepath("~/cmd",".fifo",NULL,0));
     if( gpsEnabled && deviceGPSSupport()) {
         rt_addFeature("gps");
