@@ -51,9 +51,14 @@ if [[ ! -d platform-${platform} ]]; then
         git apply ../${lgwversion}-${platform}.patch
     fi
 
-    # Apply additional patches (e.g., bypass-temp-sensor.patch for boards without temp sensor)
-    if [ -f ../bypass-temp-sensor.patch ]; then
-        echo "Applying bypass-temp-sensor.patch ..."
-        git apply ../bypass-temp-sensor.patch
-    fi
+    # Make temperature sensor optional (some boards like Dragino PG1302 don't have one)
+    # This is more robust than a patch file since line numbers can shift
+    echo "Applying temperature sensor bypass..."
+    sed -i.bak \
+        -e '/if (i == sizeof I2C_PORT_TEMP_SENSOR) {/,/return LGW_HAL_ERROR;/{
+            s/ERROR_PRINTF("no temperature sensor found/INFO_PRINTF("no temperature sensor found, temperature compensation disabled/
+            s/return LGW_HAL_ERROR;/\/* Continue without temp sensor - boards like Dragino PG1302 dont have one *\//
+        }' \
+        libloragw/src/loragw_hal.c
+    rm -f libloragw/src/loragw_hal.c.bak
 fi
