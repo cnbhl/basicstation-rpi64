@@ -412,19 +412,25 @@ step_create_credentials() {
 
     local template="$CUPS_DIR/station.conf.template"
     if file_exists "$template"; then
-        # Format GPS_DEVICE for JSON: quoted string (empty string disables GPS)
+        # Format GPS_DEVICE and PPS_SOURCE for JSON
+        # When GPS is enabled: gps="/dev/ttyXXX", pps="gps"
+        # When GPS is disabled: gps="", pps="" (uses fuzzy time sync)
         local gps_json_value
+        local pps_json_value
         if [[ -n "$GPS_DEVICE" ]]; then
             gps_json_value="\"$GPS_DEVICE\""
+            pps_json_value="\"gps\""
         else
             gps_json_value="\"\""
+            pps_json_value="\"\""
         fi
 
         process_template "$template" "$CUPS_DIR/station.conf" \
             "GATEWAY_EUI=$GATEWAY_EUI" \
             "INSTALL_DIR=$SCRIPT_DIR" \
             "LOG_FILE=$LOG_FILE" \
-            "GPS_DEVICE=$gps_json_value"
+            "GPS_DEVICE=$gps_json_value" \
+            "PPS_SOURCE=$pps_json_value"
         chmod 644 "$CUPS_DIR/station.conf"
         echo "  Created: station.conf"
     else
