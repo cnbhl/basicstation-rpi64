@@ -43,7 +43,9 @@ LOCAL_ARCH := $(shell gcc -dumpmachine)
 ARCH.linux   = x86_64-linux-gnu
 ARCH.linuxV2 = x86_64-linux-gnu
 ARCH.linuxpico = x86_64-linux-gnu
-ARCH.corecell  = aarch64-linux-gnu
+# For corecell, use local architecture if ARM-based (native build), otherwise default to aarch64
+# Matches both arm (32-bit) and aarch64 (64-bit) architectures
+ARCH.corecell = $(if $(or $(filter arm%,$(LOCAL_ARCH)),$(filter aarch64%,$(LOCAL_ARCH))),$(LOCAL_ARCH),aarch64-linux-gnu)
 ARCH.rpi     = arm-linux-gnueabihf
 ARCH.kerlink = arm-klk-linux-gnueabi
 ARCH=${ARCH.${platform}}

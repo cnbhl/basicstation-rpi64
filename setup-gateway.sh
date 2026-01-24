@@ -1,578 +1,166 @@
 #!/bin/bash
 #
-# LoRa Basic Station Setup Script for Raspberry Pi 5 with TTN
+# LoRa Basic Station Setup Script for Raspberry Pi with TTN
 # This script configures the gateway credentials for The Things Network
 #
+# Security: This script handles sensitive credentials (API keys).
+# Files containing secrets are created with restricted permissions.
+#
+# Usage:
+#   ./setup-gateway.sh              Run setup wizard
+#   ./setup-gateway.sh --uninstall  Remove installation
+#   ./setup-gateway.sh --help       Show help
+#
 
-set -e
+set -euo pipefail
 
 #######################################
-# Constants
+# Script Location and Paths
 #######################################
-readonly RED='\033[0;31m'
-readonly GREEN='\033[0;32m'
-readonly YELLOW='\033[1;33m'
-readonly NC='\033[0m'
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly SCRIPT_DIR
+readonly LIB_DIR="$SCRIPT_DIR/lib"
 readonly CUPS_DIR="$SCRIPT_DIR/examples/corecell/cups-ttn"
-readonly STATION_BINARY="$SCRIPT_DIR/build-corecell-std/bin/station"
-readonly CHIP_ID_TOOL="$SCRIPT_DIR/tools/chip_id/chip_id"
+readonly BUILD_DIR="$SCRIPT_DIR/build-corecell-std"
+readonly STATION_BINARY="$BUILD_DIR/bin/station"
 readonly CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
+readonly CHIP_ID_SOURCE="$CHIP_ID_DIR/chip_id.c"
+readonly CHIP_ID_LOG_STUB="$CHIP_ID_DIR/log_stub.c"
+readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
+readonly RESET_LGW_SCRIPT="$CUPS_DIR/reset_lgw.sh"
 readonly BOARD_CONF="$CUPS_DIR/board.conf"
 readonly BOARD_CONF_TEMPLATE="$CUPS_DIR/board.conf.template"
 
 #######################################
-# Utility Functions
+# Global State Variables
 #######################################
+TTN_REGION=""
+CUPS_URI=""
+GATEWAY_EUI=""
+CUPS_KEY=""
+LOG_FILE=""
+GPS_DEVICE=""
+MODE="setup"
+SKIP_DEPS=false
+SKIP_GPS=false
 
-print_header() {
-    echo -e "${GREEN}$1${NC}"
-}
-
-print_success() {
-    echo -e "${GREEN}$1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}$1${NC}"
-}
-
-print_error() {
-    echo -e "${RED}$1${NC}"
-}
-
-print_banner() {
-    echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN} $1${NC}"
-    echo -e "${GREEN}========================================${NC}"
-    echo ""
-}
-
-# Prompt for yes/no confirmation
-# Usage: confirm "Question?" && do_something
-# Returns 0 (true) for y/Y, 1 (false) for n/N or empty
-confirm() {
-    local prompt="$1"
-    local default="${2:-n}"
-    local response
-
-    if [ "$default" = "y" ]; then
-        read -rp "$prompt (Y/n): " response
-        [ "$response" != "n" ] && [ "$response" != "N" ]
-    else
-        read -rp "$prompt (y/N): " response
-        [ "$response" = "y" ] || [ "$response" = "Y" ]
-    fi
-}
-
-# Validate 16-character hex string
-validate_eui() {
-    local eui="$1"
-    [[ "$eui" =~ ^[0-9A-Fa-f]{16}$ ]]
-}
-
-# Validate GPIO BCM pin number (0-27 for standard Pi header)
-validate_gpio() {
-    local pin="$1"
-    [[ "$pin" =~ ^[0-9]+$ ]] && [ "$pin" -ge 0 ] && [ "$pin" -le 27 ]
-}
+# Board configuration (set by step_select_board)
+BOARD_TYPE=""
+SX1302_RESET_BCM=""
+SX1302_POWER_EN_BCM=""
 
 #######################################
-# Step Functions
+# Source Library Files
 #######################################
-
-step_check_existing_credentials() {
-    if [ -f "$CUPS_DIR/cups.key" ]; then
-        print_warning "Warning: Credentials already exist in $CUPS_DIR"
-        if ! confirm "Do you want to overwrite them?"; then
-            echo "Setup cancelled."
-            exit 0
-        fi
-    fi
-}
-
-step_select_board() {
-    print_header "Step 1: Select your concentrator board"
-    echo ""
-    echo "Which SX1302 concentrator board are you using?"
-    echo ""
-
-    # Check if template exists
-    if [ ! -f "$BOARD_CONF_TEMPLATE" ]; then
-        print_error "Error: Board template file not found: $BOARD_CONF_TEMPLATE"
+source_lib() {
+    local lib_file="$1"
+    if [[ ! -f "$lib_file" ]]; then
+        echo "Error: Library file not found: $lib_file" >&2
+        echo "Please ensure the lib/ directory is intact." >&2
         exit 1
     fi
-
-    # Read board definitions from template (skip comments and empty lines)
-    local -a board_types
-    local -a board_descs
-    local -a board_reset_pins
-    local -a board_power_pins
-    local index=1
-
-    while IFS=: read -r btype bdesc breset bpower; do
-        # Skip comments and empty lines
-        [[ "$btype" =~ ^#.*$ || -z "$btype" ]] && continue
-
-        board_types+=("$btype")
-        board_descs+=("$bdesc")
-        board_reset_pins+=("$breset")
-        board_power_pins+=("$bpower")
-
-        echo "  $index) $btype - $bdesc"
-        echo "     Reset: GPIO $breset, Power Enable: GPIO $bpower"
-        echo ""
-        ((index++))
-    done < "$BOARD_CONF_TEMPLATE"
-
-    local board_count=${#board_types[@]}
-    local manual_option=$((board_count + 1))
-
-    echo "  $manual_option) Manual configuration"
-    echo "     Specify custom GPIO pins"
-    echo ""
-
-    read -rp "Enter choice [1-$manual_option]: " board_choice
-
-    # Validate input
-    if ! [[ "$board_choice" =~ ^[0-9]+$ ]] || [ "$board_choice" -lt 1 ] || [ "$board_choice" -gt "$manual_option" ]; then
-        print_error "Invalid selection. Please try again."
-        step_select_board
-        return
-    fi
-
-    if [ "$board_choice" -eq "$manual_option" ]; then
-        # Manual configuration
-        BOARD_TYPE="CUSTOM"
-        echo ""
-        print_header "Manual GPIO Configuration"
-        echo "Enter BCM GPIO pin numbers (0-27):"
-        echo ""
-
-        while true; do
-            read -rp "SX1302 Reset pin (BCM): " SX1302_RESET_BCM
-            if validate_gpio "$SX1302_RESET_BCM"; then
-                break
-            fi
-            print_error "Invalid GPIO pin. Please enter a number between 0 and 27."
-        done
-
-        while true; do
-            read -rp "Power Enable pin (BCM): " SX1302_POWER_EN_BCM
-            if validate_gpio "$SX1302_POWER_EN_BCM"; then
-                break
-            fi
-            print_error "Invalid GPIO pin. Please enter a number between 0 and 27."
-        done
-    else
-        # Predefined board
-        local idx=$((board_choice - 1))
-        BOARD_TYPE="${board_types[$idx]}"
-        SX1302_RESET_BCM="${board_reset_pins[$idx]}"
-        SX1302_POWER_EN_BCM="${board_power_pins[$idx]}"
-    fi
-
-    echo ""
-    echo -e "Board type: ${GREEN}$BOARD_TYPE${NC}"
-    echo -e "SX1302 Reset pin: ${GREEN}GPIO $SX1302_RESET_BCM (BCM)${NC}"
-    echo -e "Power Enable pin: ${GREEN}GPIO $SX1302_POWER_EN_BCM (BCM)${NC}"
-    echo ""
-
-    if ! confirm "Is this correct?" "y"; then
-        step_select_board
-        return
-    fi
-
-    # Save board configuration
-    cat > "$BOARD_CONF" << EOF
-# Board configuration for SX1302 concentrator
-# Generated by setup-gateway.sh on $(date)
-#
-# To use a different board, re-run setup-gateway.sh or edit this file.
-# BCM pin numbers are converted to actual GPIO numbers by reset_lgw.sh
-#
-BOARD_TYPE=$BOARD_TYPE
-SX1302_RESET_BCM=$SX1302_RESET_BCM
-SX1302_POWER_EN_BCM=$SX1302_POWER_EN_BCM
-EOF
-
-    print_success "Board configuration saved to $BOARD_CONF"
-    echo ""
+    # shellcheck source=/dev/null
+    source "$lib_file"
 }
 
-step_build_station() {
-    print_header "Step 2: Build the station binary"
-    echo ""
-    echo "This step will compile the Basic Station software for the SX1302 Corecell platform."
-    echo ""
-    echo "The build process will:"
-    echo "  - Download and compile dependencies (mbedTLS, libloragw)"
-    echo "  - Compile the Basic Station source code"
-    echo "  - Create the executable at: build-corecell-std/bin/station"
-    echo ""
+source_lib "$LIB_DIR/common.sh"
+source_lib "$LIB_DIR/validation.sh"
+source_lib "$LIB_DIR/file_ops.sh"
+source_lib "$LIB_DIR/service.sh"
+source_lib "$LIB_DIR/gps.sh"
+source_lib "$LIB_DIR/setup.sh"
+source_lib "$LIB_DIR/uninstall.sh"
 
-    if [ -f "$STATION_BINARY" ]; then
-        print_warning "Note: A station binary already exists."
-        if ! confirm "Do you want to rebuild?"; then
-            print_success "Skipping build, using existing binary."
-            echo ""
-            return 0
-        fi
-    fi
-
-    if ! confirm "Start the build process now?" "y"; then
-        echo "Setup cancelled. You can build manually with:"
-        echo "  make platform=corecell variant=std"
-        exit 0
-    fi
-
+#######################################
+# Usage / Help
+#######################################
+print_usage() {
+    echo "Usage: $0 [OPTIONS]"
     echo ""
-    print_warning "Building... This may take several minutes on first build."
+    echo "LoRa Basic Station Setup Script for Raspberry Pi with TTN"
     echo ""
-
-    cd "$SCRIPT_DIR"
-    if make platform=corecell variant=std; then
-        echo ""
-        print_success "Build completed successfully."
-    else
-        print_error "Build failed. Please check the error messages above."
-        echo "You can try building manually with: make platform=corecell variant=std"
-        exit 1
-    fi
+    echo "Options:"
+    echo "  -h, --help       Show this help message and exit"
+    echo "  -u, --uninstall  Remove installed service, credentials, and logs"
+    echo "  -v, --verbose    Enable verbose (debug) logging"
+    echo "  --skip-deps      Skip dependency checks (advanced users only)"
+    echo "  --skip-gps       Skip GPS auto-detection (manual entry or disable)"
     echo ""
+    echo "Without options, runs the interactive setup wizard."
+    echo ""
+    echo "Logs are written to: \$SCRIPT_DIR/setup.log"
+    echo ""
+    echo "Notes:"
+    echo "  GPS detection requires sudo and scans serial ports (may take 30-60 seconds)."
+    echo "  Use --skip-gps to bypass scanning if no GPS module is connected."
+    echo ""
+    echo "Examples:"
+    echo "  $0               Run setup wizard"
+    echo "  $0 --uninstall   Remove installation"
+    echo "  $0 -v            Run setup with debug logging"
+    echo "  $0 --skip-gps    Skip GPS port scanning"
 }
 
-step_select_region() {
-    print_header "Step 3: Select your TTN region"
-    echo "  1) EU1  - Europe (eu1.cloud.thethings.network)"
-    echo "  2) NAM1 - North America (nam1.cloud.thethings.network)"
-    echo "  3) AU1  - Australia (au1.cloud.thethings.network)"
-    echo ""
-    read -rp "Enter region number [1-3]: " region_choice
-
-    case $region_choice in
-        1) TTN_REGION="eu1" ;;
-        2) TTN_REGION="nam1" ;;
-        3) TTN_REGION="au1" ;;
-        *)
-            print_error "Invalid selection. Defaulting to EU1."
-            TTN_REGION="eu1"
-            ;;
-    esac
-
-    CUPS_URI="https://${TTN_REGION}.cloud.thethings.network:443"
-    echo -e "Selected: ${GREEN}$CUPS_URI${NC}"
-    echo ""
-}
-
-step_detect_eui() {
-    local detected_eui=""
-
-    print_header "Step 4: Gateway EUI Detection"
-    echo ""
-    echo "The Gateway EUI is a unique 64-bit identifier for your gateway."
-    echo "This EUI is required to register your gateway on The Things Network."
-    echo ""
-    echo "Attempting to read EUI from SX1302 chip..."
-    echo ""
-
-    if [ -x "$CHIP_ID_TOOL" ]; then
-        cd "$CHIP_ID_DIR"
-        local chip_output
-        chip_output=$(sudo ./chip_id -d /dev/spidev0.0 2>&1) || true
-        cd "$SCRIPT_DIR"
-
-        detected_eui=$(echo "$chip_output" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]')
-
-        if [ -n "$detected_eui" ] && validate_eui "$detected_eui"; then
-            echo -e "Detected EUI from SX1302 chip: ${GREEN}$detected_eui${NC}"
-            echo ""
-            if confirm "Use this EUI?" "y"; then
-                GATEWAY_EUI="$detected_eui"
-                return 0
-            fi
-            detected_eui=""
-        else
-            print_warning "Could not auto-detect EUI from SX1302 chip."
-        fi
-    else
-        print_warning "chip_id tool not found at $CHIP_ID_TOOL"
-        echo "You can build it from sx1302_hal or enter the EUI manually."
-    fi
-
-    echo ""
-    echo "Please enter your Gateway EUI manually."
-    echo "This is a 16-character hex string (e.g., AABBCCDDEEFF0011)"
-    echo "You can find this in your TTN Console under Gateway settings."
-    echo ""
-    read -rp "Gateway EUI: " GATEWAY_EUI
-
-    if ! validate_eui "$GATEWAY_EUI"; then
-        print_warning "Warning: Gateway EUI should be 16 hex characters."
-        if ! confirm "Continue anyway?"; then
-            echo "Setup cancelled."
-            exit 1
-        fi
-    fi
-
-    GATEWAY_EUI=$(echo "$GATEWAY_EUI" | tr '[:lower:]' '[:upper:]')
-}
-
-step_show_registration_instructions() {
-    echo -e "Gateway EUI: ${GREEN}$GATEWAY_EUI${NC}"
-    echo ""
-    print_warning "────────────────────────────────────────────────────────────────"
-    print_warning "IMPORTANT: Register this gateway in TTN Console before continuing"
-    print_warning "────────────────────────────────────────────────────────────────"
-    echo ""
-    echo "If you haven't already, you need to register this gateway in TTN:"
-    echo ""
-    echo "  1. Go to: https://console.cloud.thethings.network/"
-    echo "  2. Select your region (${TTN_REGION})"
-    echo "  3. Navigate to: Gateways > + Register gateway"
-    echo "  4. Enter Gateway EUI: ${GATEWAY_EUI}"
-    echo "  5. Choose frequency plan matching your hardware"
-    echo "  6. Click 'Register gateway'"
-    echo ""
-    echo "After registration, you'll need to create an API key (next step)."
-    echo ""
-    read -rp "Press Enter when your gateway is registered in TTN Console... "
-    echo ""
-}
-
-step_get_cups_key() {
-    print_header "Step 5: Enter your CUPS API Key"
-    echo ""
-    echo "Now create an API key for CUPS in TTN Console:"
-    echo ""
-    echo "  1. Go to your gateway in TTN Console"
-    echo "  2. Navigate to: API Keys > + Add API Key"
-    echo "  3. Name it (e.g., 'CUPS Key')"
-    echo "  4. Grant rights: 'Link as Gateway to a Gateway Server for traffic"
-    echo "     exchange, i.e. write uplink and read downlink'"
-    echo "  5. Click 'Create API Key' and copy the key"
-    echo ""
-    print_warning "Note: The key is only shown once - copy it now!"
-    echo ""
-    echo "Paste your API key (it will not be displayed):"
-    read -rs CUPS_KEY
-    echo ""
-
-    if [ -z "$CUPS_KEY" ]; then
-        print_error "Error: API key cannot be empty."
-        exit 1
-    fi
-
-    # Strip "Authorization: Bearer " prefix if user pasted the full string
-    CUPS_KEY="${CUPS_KEY#Authorization: Bearer }"
-
-    print_success "API key received."
-    echo ""
-}
-
-step_setup_trust_cert() {
-    print_header "Step 6: Setting up trust certificate..."
-
-    local trust_cert="$CUPS_DIR/cups.trust"
-
-    if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
-        cp /etc/ssl/certs/ca-certificates.crt "$trust_cert"
-        print_success "Trust certificate installed (system CA bundle)."
-    else
-        echo "System CA bundle not found, downloading Let's Encrypt root..."
-        curl -sf https://letsencrypt.org/certs/isrgrootx1.pem -o "$trust_cert"
-        if [ ! -f "$trust_cert" ] || [ ! -s "$trust_cert" ]; then
-            print_error "Error: Could not obtain trust certificate."
-            exit 1
-        fi
-        print_success "Trust certificate downloaded."
-    fi
-    echo ""
-}
-
-step_select_log_location() {
-    print_header "Step 7: Select log file location"
-    echo "  1) Local directory ($CUPS_DIR/station.log)"
-    echo "  2) System log (/var/log/station.log) - requires sudo"
-    echo ""
-    read -rp "Enter choice [1-2]: " log_choice
-
-    case $log_choice in
-        2)
-            LOG_FILE="/var/log/station.log"
-            print_warning "Note: You will need to create the log file with proper permissions:"
-            print_warning "  sudo touch /var/log/station.log"
-            print_warning "  sudo chown $USER:$USER /var/log/station.log"
-            if confirm "Create log file now with sudo?" "y"; then
-                sudo touch /var/log/station.log
-                sudo chown "$USER:$USER" /var/log/station.log
-                chmod 644 /var/log/station.log
-                print_success "Log file created: /var/log/station.log"
-            fi
-            ;;
-        *)
-            LOG_FILE="$CUPS_DIR/station.log"
-            touch "$LOG_FILE"
-            chmod 644 "$LOG_FILE"
-            print_success "Log file will be: $LOG_FILE"
-            ;;
-    esac
-    echo ""
-}
-
-step_create_credentials() {
-    print_header "Step 8: Creating credential files..."
-
-    echo "$CUPS_URI" > "$CUPS_DIR/cups.uri"
-    echo "  Created: cups.uri"
-
-    echo "Authorization: Bearer $CUPS_KEY" > "$CUPS_DIR/cups.key"
-    echo "  Created: cups.key"
-
-    print_header "Step 9: Generating station.conf..."
-
-    if [ -f "$CUPS_DIR/station.conf.template" ]; then
-        sed -e "s|{{GATEWAY_EUI}}|$GATEWAY_EUI|g" \
-            -e "s|{{INSTALL_DIR}}|$SCRIPT_DIR|g" \
-            -e "s|{{LOG_FILE}}|$LOG_FILE|g" \
-            "$CUPS_DIR/station.conf.template" > "$CUPS_DIR/station.conf"
-        echo "  Created: station.conf"
-    else
-        print_warning "Warning: station.conf.template not found. Please configure station.conf manually."
-    fi
-
-    print_header "Step 10: Setting file permissions..."
-    chmod 600 "$CUPS_DIR/cups.key" 2>/dev/null || true
-    chmod 600 "$CUPS_DIR/tc.key" 2>/dev/null || true
-    chmod 644 "$CUPS_DIR/cups.uri" 2>/dev/null || true
-    chmod 644 "$CUPS_DIR/cups.trust" 2>/dev/null || true
-    chmod 644 "$CUPS_DIR/station.conf" 2>/dev/null || true
-    echo "  Permissions set."
-}
-
-step_setup_service() {
-    echo ""
-    print_header "Step 11: Gateway startup configuration"
-    echo ""
-
-    if ! confirm "Do you want to run the gateway as a systemd service?"; then
-        print_summary "manual"
-        return 0
-    fi
-
-    echo ""
-    print_success "Setting up systemd service..."
-
-    local service_file="/etc/systemd/system/basicstation.service"
-
-    sudo tee "$service_file" > /dev/null << EOF
-[Unit]
-Description=LoRa Basics Station (SX1302/Corecell) for TTN (CUPS)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=$SCRIPT_DIR
-
-ExecStart=$STATION_BINARY --home $CUPS_DIR
-
-Restart=on-failure
-RestartSec=5
-
-# Security hardening
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-ProtectHome=false
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-
-# Logs
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=basicstation
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    echo "  Created: $service_file"
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable basicstation.service
-    echo "  Service enabled."
-
-    echo ""
-    if confirm "Do you want to start the service now?" "y"; then
-        sudo systemctl start basicstation.service
-        sleep 2
-        if systemctl is-active --quiet basicstation.service; then
-            print_success "Service started successfully!"
-        else
-            print_warning "Service may have failed to start. Check status with:"
-            echo "  sudo systemctl status basicstation.service"
-            echo "  sudo journalctl -u basicstation.service -f"
-        fi
-    else
-        echo ""
-        echo "To start the service later, run:"
-        print_warning "  sudo systemctl start basicstation.service"
-    fi
-
-    print_summary "service"
-}
-
-print_summary() {
-    local mode="$1"
-
-    echo ""
-    print_banner "Setup Complete!"
-    echo "Your gateway is configured with:"
-    echo "  Board:       $BOARD_TYPE"
-    echo "  Region:      $TTN_REGION"
-    echo "  Gateway EUI: $GATEWAY_EUI"
-    echo "  Config dir:  $CUPS_DIR"
-    echo "  Log file:    $LOG_FILE"
-    echo ""
-
-    if [ "$mode" = "service" ]; then
-        echo "Useful commands:"
-        print_warning "  sudo systemctl status basicstation.service  - Check service status"
-        print_warning "  sudo systemctl stop basicstation.service   - Stop the service"
-        print_warning "  sudo systemctl restart basicstation.service - Restart the service"
-        print_warning "  sudo journalctl -u basicstation.service -f  - View live logs"
-    else
-        echo "To start the gateway manually:"
-        print_warning "  cd $SCRIPT_DIR/examples/corecell"
-        print_warning "  ./start-station.sh -l ./cups-ttn"
-        echo ""
-        print_warning "Note: You may need to run start-station.sh with sudo for GPIO access."
-    fi
+#######################################
+# Argument Parsing
+#######################################
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                print_usage
+                exit 0
+                ;;
+            -u|--uninstall)
+                MODE="uninstall"
+                shift
+                ;;
+            -v|--verbose)
+                CURRENT_LOG_LEVEL=$LOG_LEVEL_DEBUG
+                shift
+                ;;
+            --skip-deps)
+                SKIP_DEPS=true
+                shift
+                ;;
+            --skip-gps)
+                SKIP_GPS=true
+                shift
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                echo ""
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
 }
 
 #######################################
 # Main
 #######################################
-
 main() {
-    print_banner "LoRa Basic Station Setup for TTN"
+    parse_args "$@"
 
-    step_check_existing_credentials
-    step_select_board
-    step_build_station
-    step_select_region
-    step_detect_eui
-    step_show_registration_instructions
-    step_get_cups_key
-    step_setup_trust_cert
-    step_select_log_location
-    step_create_credentials
-    step_setup_service
+    # Initialize logging (logs to $SCRIPT_DIR/setup.log)
+    init_logging "$SCRIPT_DIR/setup.log"
+    log_info "Starting setup-gateway.sh in $MODE mode"
+
+    case "$MODE" in
+        setup)
+            run_setup
+            ;;
+        uninstall)
+            run_uninstall
+            ;;
+        *)
+            print_error "Unknown mode: $MODE"
+            exit 1
+            ;;
+    esac
+
+    log_info "Script completed successfully"
 }
 
 main "$@"

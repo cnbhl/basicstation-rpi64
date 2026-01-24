@@ -43,7 +43,7 @@
     "station_conf": {
         "routerid": "{{GATEWAY_EUI}}",
         "radio_init": "{{INSTALL_DIR}}/examples/corecell/cups-ttn/rinit.sh",
-        "gps": "/dev/ttyS0",
+        "gps": {{GPS_DEVICE}},
         "pps": "gps",
         "RADIO_INIT_WAIT": "5s",
         "RX_POLL_INTV": "10ms",

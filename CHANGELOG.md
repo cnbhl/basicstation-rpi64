@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.0.6-cnbhl.5 - 2025-01-24
+
+* deps: Extended required dependency checks (gcc, make, curl, sed, grep, tr, cat, cp, mv, chmod, mktemp, tee, stty, timeout, sudo, systemctl)
+* security: Atomic temp file writes with restrictive umask (077)
+* security: Cleanup trap on EXIT for orphaned temp files
+* feature: `--skip-gps` flag to bypass GPS auto-detection
+* feature: Privilege detection with `is_root()`, `check_sudo_available()`, `run_privileged()`, `require_privilege()`
+* fix: GPS detection avoids duplicate scans via symlink tracking
+
+## 2.0.6-cnbhl.3 - 2025-01-21
+
+* security: Use `set -euo pipefail` for stricter error handling
+* security: Write secrets via here-string to prevent process listing exposure
+* security: Atomic file writes with permissions set before content written
+* security: Sanitize user input for sed to prevent injection attacks
+* security: Consistent quoting of all variables
+* refactor: Added reusable input functions (confirm, read_secret, read_validated)
+* refactor: Added validation functions (validate_eui, validate_not_empty, sanitize_for_sed)
+* refactor: Added secure file operations (write_file_secure, write_secret_file, copy_file)
+* refactor: Added system check functions (command_exists, file_exists, check_spi_available)
+* refactor: Added service management functions (service_is_active, service_start, service_restart)
+* refactor: Added safe template processing with process_template()
+
+## 2.0.6-cnbhl.2 - 2025-01-20
+
+* setup: Build chip_id from source for architecture-independent EUI detection
+* setup: Added log_hal stub to link chip_id with station's libloragw
+* setup: Show chip_id build errors for easier debugging
+* setup: Auto-detect ARM architecture (32-bit and 64-bit) for corecell platform
+* setup: Fix sysfs GPIO access and auto-restart service on update
+* docs: Added Raspberry Pi interface configuration guide (SPI, I2C, serial)
+* docs: Updated README with raspi-config requirements
+
+## 2.0.6-cnbhl.1 - 2025-01-19
+
+* Initial fork release with Raspberry Pi 5 support
+* Added automated setup script for TTN CUPS configuration
+* Added Gateway EUI auto-detection from SX1302/SX1303 chip
+* Added systemd service configuration
+* Added Pi 5 GPIO compatibility (base offset 571)
+
 ## 2.0.6 - 2022-01-17
 
 * deps: Updated sx1302_hal dependency to version 2.1.0 (no LBT yet) (#89, #103, #121, #130)
