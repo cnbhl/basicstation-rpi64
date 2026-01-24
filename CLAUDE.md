@@ -197,3 +197,9 @@ Format: `2.0.6-cnbhl.N` or `2.0.6-cnbhl.Na`
 - **Release title**: `Release 2.0.6-cnbhl.N` (prefix with "Release ")
 
 Examples: Tag `2.0.6-cnbhl.5` → Title "Release 2.0.6-cnbhl.5"
+
+## Git Workflow
+
+- **Master branch is protected**: Cannot push directly to master
+- **All changes require a PR**: Create a feature/fix branch, then open a pull request
+- **Branch naming**: Use prefixes like `fix/`, `feature/`, `docs/` (e.g., `fix/skip-gps-option`)
