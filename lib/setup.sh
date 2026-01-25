@@ -642,18 +642,57 @@ EOF
     echo "  Service enabled."
 
     echo ""
+    local service_started=false
     if [[ "$service_was_active" == true ]]; then
         print_warning "Service was already running. Restarting with new configuration..."
         service_restart "$service_name" || true
+        service_started=true
     elif confirm "Do you want to start the service now?" "y"; then
         service_start "$service_name" || true
+        service_started=true
     else
         echo ""
         echo "To start the service later, run:"
         print_warning "  sudo systemctl start $service_name"
     fi
 
+    # Verify gateway actually started if service was started/restarted
+    if [[ "$service_started" == true ]]; then
+        verify_gateway_started || true
+    fi
+
     print_summary "service"
+}
+
+verify_gateway_started() {
+    local timeout=30
+    local interval=2
+    local elapsed=0
+
+    echo ""
+    while [[ $elapsed -lt $timeout ]]; do
+        printf "\rVerifying gateway startup... (%d/%ds)" "$elapsed" "$timeout"
+
+        # Check station.log for "Concentrator started"
+        if [[ -f "$LOG_FILE" ]] && grep -q "Concentrator started" "$LOG_FILE" 2>/dev/null; then
+            printf "\r%-50s\n" ""  # Clear the line
+            print_success "Gateway concentrator started successfully!"
+            return 0
+        fi
+        # Also check journalctl if using systemd
+        if journalctl -u basicstation.service --since "1 minute ago" 2>/dev/null | grep -q "Concentrator started"; then
+            printf "\r%-50s\n" ""  # Clear the line
+            print_success "Gateway concentrator started successfully!"
+            return 0
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+
+    printf "\r%-50s\n" ""  # Clear the line
+    print_warning "Could not verify concentrator startup within ${timeout}s."
+    print_warning "Check logs manually: tail -f $LOG_FILE"
+    return 1
 }
 
 print_summary() {
@@ -674,10 +713,10 @@ print_summary() {
 
     if [[ "$mode" == "service" ]]; then
         echo "Useful commands:"
-        print_warning "  sudo systemctl status basicstation.service  - Check service status"
-        print_warning "  sudo systemctl stop basicstation.service   - Stop the service"
-        print_warning "  sudo systemctl restart basicstation.service - Restart the service"
-        print_warning "  sudo journalctl -u basicstation.service -f  - View live logs"
+        print_warning "  sudo systemctl status basicstation.service   - Check service status"
+        print_warning "  sudo systemctl restart basicstation.service  - Restart the service"
+        print_warning "  sudo journalctl -u basicstation.service -f   - View live systemd logs"
+        print_warning "  tail -n 100 $LOG_FILE  - View station log"
     else
         echo "To start the gateway manually:"
         print_warning "  cd $SCRIPT_DIR/examples/corecell"
