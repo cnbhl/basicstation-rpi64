@@ -28,6 +28,8 @@ readonly CHIP_ID_SOURCE="$CHIP_ID_DIR/chip_id.c"
 readonly CHIP_ID_LOG_STUB="$CHIP_ID_DIR/log_stub.c"
 readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
 readonly RESET_LGW_SCRIPT="$CUPS_DIR/reset_lgw.sh"
+readonly BOARD_CONF="$CUPS_DIR/board.conf"
+readonly BOARD_CONF_TEMPLATE="$CUPS_DIR/board.conf.template"
 
 #######################################
 # Global State Variables
@@ -41,6 +43,11 @@ GPS_DEVICE=""
 MODE="setup"
 SKIP_DEPS=false
 SKIP_GPS=false
+
+# Board configuration (set by step_select_board)
+BOARD_TYPE=""
+SX1302_RESET_BCM=""
+SX1302_POWER_EN_BCM=""
 
 #######################################
 # Source Library Files

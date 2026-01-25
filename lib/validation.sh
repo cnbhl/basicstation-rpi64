@@ -21,6 +21,12 @@ validate_not_empty() {
     [[ -n "$value" ]]
 }
 
+# Validate GPIO BCM pin number (0-27 for standard Pi header)
+validate_gpio() {
+    local pin="$1"
+    [[ "$pin" =~ ^[0-9]+$ ]] && [ "$pin" -ge 0 ] && [ "$pin" -le 27 ]
+}
+
 # Sanitize string for use in sed replacement
 # Escapes special characters: \ / & and newlines
 sanitize_for_sed() {

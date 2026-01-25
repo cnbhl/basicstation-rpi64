@@ -1,17 +1,34 @@
 #!/bin/sh
-# Reset script for SX1302 CoreCell / WM1302 on Raspberry Pi
+# Reset script for SX1302 CoreCell concentrators on Raspberry Pi
+# Supports multiple boards: WM1302 (Seeed), PG1302 (Dragino), and custom configs
 # Auto-detects GPIO chip offset for different Raspberry Pi models
 
 # =============================================================================
-# WM1302 Physical GPIO Pin Definitions (active on WM1302 SPI HAT)
-# See: https://wiki.seeedstudio.com/WM1302_module/
+# Board Configuration
 # =============================================================================
-WM1302_RESET_GPIO=17      # SX1302 reset (physical pin 11)
-WM1302_POWER_EN_GPIO=18   # SX1302 power enable (physical pin 12)
-WM1302_SX1261_GPIO=5      # SX1261 reset (physical pin 29)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BOARD_CONF="$SCRIPT_DIR/board.conf"
 
-# WM1302 normally does NOT need AD5338R. Leave empty to disable.
-WM1302_AD5338R_GPIO=""
+# Default values (WM1302 for backward compatibility)
+SX1302_RESET_BCM=17
+SX1302_POWER_EN_BCM=18
+BOARD_TYPE="WM1302"
+
+# Load board configuration if available
+if [ -f "$BOARD_CONF" ]; then
+    # Source the config file (reads BOARD_TYPE, SX1302_RESET_BCM, SX1302_POWER_EN_BCM)
+    . "$BOARD_CONF"
+    echo "Loaded board configuration: $BOARD_TYPE"
+else
+    echo "No board.conf found, using default WM1302 configuration"
+fi
+
+# Additional GPIO pins (board-specific, can be extended in board.conf)
+# SX1261 reset pin - only used by some boards
+SX1261_RESET_BCM=${SX1261_RESET_BCM:-5}
+
+# AD5338R reset pin - leave empty to disable
+AD5338R_RESET_BCM=${AD5338R_RESET_BCM:-}
 
 # =============================================================================
 # Auto-detect GPIO chip base offset for different Raspberry Pi models
@@ -72,20 +89,21 @@ detect_gpio_base() {
 # =============================================================================
 GPIO_BASE=$(detect_gpio_base)
 
-SX1302_RESET_PIN=$((GPIO_BASE + WM1302_RESET_GPIO))
-SX1302_POWER_EN_PIN=$((GPIO_BASE + WM1302_POWER_EN_GPIO))
-SX1261_RESET_PIN=$((GPIO_BASE + WM1302_SX1261_GPIO))
+SX1302_RESET_PIN=$((GPIO_BASE + SX1302_RESET_BCM))
+SX1302_POWER_EN_PIN=$((GPIO_BASE + SX1302_POWER_EN_BCM))
+SX1261_RESET_PIN=$((GPIO_BASE + SX1261_RESET_BCM))
 
-if [ -n "$WM1302_AD5338R_GPIO" ]; then
-    AD5338R_RESET_PIN=$((GPIO_BASE + WM1302_AD5338R_GPIO))
+if [ -n "$AD5338R_RESET_BCM" ]; then
+    AD5338R_RESET_PIN=$((GPIO_BASE + AD5338R_RESET_BCM))
 else
     AD5338R_RESET_PIN=""
 fi
 
+echo "Board: $BOARD_TYPE"
 echo "Detected GPIO base offset: $GPIO_BASE"
-echo "  SX1302 Reset:    GPIO $WM1302_RESET_GPIO -> sysfs $SX1302_RESET_PIN"
-echo "  SX1302 Power EN: GPIO $WM1302_POWER_EN_GPIO -> sysfs $SX1302_POWER_EN_PIN"
-echo "  SX1261 Reset:    GPIO $WM1302_SX1261_GPIO -> sysfs $SX1261_RESET_PIN"
+echo "  SX1302 Reset:    BCM $SX1302_RESET_BCM -> sysfs $SX1302_RESET_PIN"
+echo "  SX1302 Power EN: BCM $SX1302_POWER_EN_BCM -> sysfs $SX1302_POWER_EN_PIN"
+echo "  SX1261 Reset:    BCM $SX1261_RESET_BCM -> sysfs $SX1261_RESET_PIN"
 
 WAIT_GPIO() { sleep 0.1; }
 
