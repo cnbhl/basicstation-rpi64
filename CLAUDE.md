@@ -287,6 +287,30 @@ Platform/variant configuration in `setup.gmk`:
 - Auto-detects ARM32/ARM64 for native builds
 - Cross-compilation via `$HOME/toolchain-corecell/` if available
 
+**Future: Multi-arch Docker builds**
+The [xoseperez/basicstation](https://github.com/xoseperez/basicstation) fork has a multi-arch build system
+(commit `e8d893a`) that adds an `arch` parameter for explicit target selection:
+```bash
+make platform=corecell arch=aarch64  # 64-bit ARM
+make platform=corecell arch=armv7hf  # 32-bit ARM (Pi 2/3/4)
+make platform=corecell arch=armv6l   # Pi Zero/1
+make platform=corecell arch=amd64    # x86_64
+```
+This conflicts with our auto-detection but may be useful for Docker multi-arch builds.
+
+**Future: NetID/OUI Whitelist**
+The [xoseperez/basicstation](https://github.com/xoseperez/basicstation) fork has local packet filtering
+(commit `4aabf75`) that allows filtering packets at the gateway before forwarding to the LNS:
+```json
+{
+    "whitelist_netids": ["0x000013"],
+    "whitelist_ouis": ["0xA81758", "0x70B3D5"]
+}
+```
+- **OUI filter**: Filters join requests by DevEUI manufacturer prefix (e.g., `0xA81758` = RAK)
+- **NetID filter**: Filters data frames by network ID extracted from DevAddr (e.g., `0x000013` = TTN)
+Useful for multi-tenant gateways or shared infrastructure. Not needed for single-network setups.
+
 ## Versioning Convention
 
 Format: `2.0.6-cnbhl.X.Y` or `2.0.6-cnbhl.X.Ya`
