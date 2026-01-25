@@ -54,11 +54,22 @@ if [[ ! -d platform-${platform} ]]; then
     # Make temperature sensor optional (some boards like Dragino PG1302 don't have one)
     # This is more robust than a patch file since line numbers can shift
     echo "Applying temperature sensor bypass..."
+
+    # Fix 1: Don't fail lgw_start() when no temp sensor found
     sed -i.bak \
         -e '/if (i == sizeof I2C_PORT_TEMP_SENSOR) {/,/return LGW_HAL_ERROR;/{
             s/ERROR_PRINTF("no temperature sensor found/INFO_PRINTF("no temperature sensor found, temperature compensation disabled/
             s/return LGW_HAL_ERROR;/\/* Continue without temp sensor - boards like Dragino PG1302 dont have one *\//
         }' \
         libloragw/src/loragw_hal.c
+
+    # Fix 2: Don't fail lgw_receive() when temp reading fails - use default temperature
+    sed -i \
+        -e '/Apply RSSI temperature compensation/,/return LGW_HAL_ERROR;/{
+            s/ERROR_PRINTF("failed to get current temperature/DEBUG_PRINTF("no temp sensor, using default temperature/
+            s/return LGW_HAL_ERROR;/current_temperature = 25.0; \/* default temp when no sensor *\//
+        }' \
+        libloragw/src/loragw_hal.c
+
     rm -f libloragw/src/loragw_hal.c.bak
 fi
