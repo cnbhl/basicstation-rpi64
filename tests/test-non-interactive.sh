@@ -35,15 +35,15 @@ run_test() {
     local test_name="$1"
     local test_func="$2"
 
-    ((TESTS_RUN++))
+    (( ++TESTS_RUN ))
     echo ""
     echo "Running: $test_name"
 
     if $test_func; then
-        ((TESTS_PASSED++))
+        (( ++TESTS_PASSED ))
         echo "  Result: PASSED"
     else
-        ((TESTS_FAILED++))
+        (( ++TESTS_FAILED ))
         echo "  Result: FAILED"
     fi
 }
@@ -127,16 +127,12 @@ test_help_flag() {
 }
 
 test_missing_required_args() {
-    local result=true
+    local output
 
     # Run with -y but missing required args - should fail
-    if "$SCRIPT_DIR/setup-gateway.sh" -y 2>&1 | grep -q "Missing or invalid arguments"; then
-        result=true
-    else
-        result=false
-    fi
+    output=$("$SCRIPT_DIR/setup-gateway.sh" -y 2>&1) || true
 
-    $result
+    [[ "$output" == *"Missing or invalid arguments"* ]]
 }
 
 test_invalid_board() {

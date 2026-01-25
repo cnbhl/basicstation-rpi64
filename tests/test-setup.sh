@@ -32,15 +32,15 @@ run_test() {
     local test_name="$1"
     local test_func="$2"
 
-    ((TESTS_RUN++))
+    (( ++TESTS_RUN ))
     echo ""
     echo "Running: $test_name"
 
     if $test_func; then
-        ((TESTS_PASSED++))
+        (( ++TESTS_PASSED ))
         echo "  Result: PASSED"
     else
-        ((TESTS_FAILED++))
+        (( ++TESTS_FAILED ))
         echo "  Result: FAILED"
     fi
 }
