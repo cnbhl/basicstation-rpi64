@@ -150,10 +150,18 @@ print_banner() {
 # Usage: confirm "Question?" && do_something
 # Args: $1 = prompt, $2 = default (y/n, default: n)
 # Returns: 0 (true) for yes, 1 (false) for no
+# Note: In non-interactive mode, returns based on default value
 confirm() {
     local prompt="$1"
     local default="${2:-n}"
     local response
+
+    # Non-interactive: return based on default
+    if [[ "${NON_INTERACTIVE:-false}" == true ]]; then
+        log_debug "Non-interactive: auto-answering '$default' to: $prompt"
+        [[ "$default" == "y" ]]
+        return
+    fi
 
     if [[ "$default" == "y" ]]; then
         read -rp "$prompt (Y/n): " response
@@ -167,9 +175,21 @@ confirm() {
 # Read a secret value without echoing
 # Args: $1 = variable name to set, $2 = prompt
 # Returns: 0 on success, 1 if empty
+# Note: In non-interactive mode, the variable must already be set
 read_secret() {
     local -n ref=$1
     local prompt="$2"
+
+    # Non-interactive: variable must already be set
+    if [[ "${NON_INTERACTIVE:-false}" == true ]]; then
+        if [[ -n "$ref" ]]; then
+            log_debug "Non-interactive: using pre-set value for secret"
+            return 0
+        else
+            log_error "Non-interactive mode: secret value not provided via CLI"
+            return 1
+        fi
+    fi
 
     echo "$prompt"
     read -rs ref
