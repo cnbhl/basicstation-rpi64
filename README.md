@@ -2,6 +2,7 @@
 
 Fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (v2.0.6) adding:
 - Raspberry Pi 5 GPIO compatibility
+- **Multi-board support** (Seeed WM1302, Dragino PG1302, Elecrow LR1302, Waveshare SX1302)
 - Automated TTN CUPS setup with `setup-gateway.sh`
 - Automatic Gateway EUI detection from SX1302/SX1303
 - Systemd service configuration
@@ -28,10 +29,24 @@ The setup wizard builds the station, detects your Gateway EUI, configures TTN CU
 ./setup-gateway.sh --skip-gps   # Skip GPS auto-detection
 ```
 
+## Supported Boards
+
+| Board | Manufacturer | Status |
+|-------|--------------|--------|
+| WM1302 | Seeed Studio | Tested |
+| PG1302 | Dragino | Tested |
+| LR1302 | Elecrow | Supported |
+| SX1302 HAT | Waveshare | Supported |
+| CoreCell | Semtech Reference | Supported |
+
+The setup wizard auto-configures GPIO pins for your board. Custom boards can specify pins manually.
+
+See [docs/SUPPORTED_BOARDS.md](docs/SUPPORTED_BOARDS.md) for detailed GPIO pinouts and adding new boards.
+
 ## Prerequisites
 
 - Raspberry Pi 3/4/5 with SPI and I2C enabled
-- SX1302/SX1303 concentrator (WM1302, RAK2287, etc.)
+- SX1302/SX1303 concentrator HAT (see supported boards above)
 - Gateway registered on [TTN Console](https://console.cloud.thethings.network/)
 - CUPS API Key from TTN
 

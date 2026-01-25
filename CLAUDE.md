@@ -47,6 +47,29 @@ Main entry point that sources modular libraries from `lib/`. Supports:
 - `--skip-deps` - Skip dependency checks
 - `--skip-gps` - Skip GPS auto-detection
 
+### Board Configuration System
+The setup wizard supports multiple SX1302 concentrator boards with different GPIO pinouts:
+
+**Supported boards** (defined in `examples/corecell/cups-ttn/board.conf.template`):
+- **WM1302** (Seeed Studio) - Reset=17, PowerEN=18, SX1261=5
+- **PG1302** (Dragino) - Reset=23, PowerEN=27, SX1261=22
+- **LR1302** (Elecrow) - Reset=17, PowerEN=18, SX1261=5
+- **SX1302_WS** (Waveshare) - Reset=23, PowerEN=18, SX1261=22
+- **SEMTECH** (Reference Design) - Reset=23, PowerEN=18, SX1261=22
+
+**Configuration flow**:
+1. `step_select_board()` in `lib/setup.sh` presents board menu
+2. User selects board or enters custom GPIO pins
+3. Configuration saved to `examples/corecell/cups-ttn/board.conf`
+4. `reset_lgw.sh` reads `board.conf` at runtime for GPIO control
+
+**Adding new boards**: Edit `board.conf.template` with format:
+```
+BOARD_ID:Description:SX1302_RESET_BCM:POWER_EN_BCM:SX1261_RESET_BCM
+```
+
+See [docs/SUPPORTED_BOARDS.md](docs/SUPPORTED_BOARDS.md) for detailed GPIO reference.
+
 ### `lib/` - Modular Library Structure
 
 #### `lib/common.sh`
@@ -101,16 +124,20 @@ GPS serial port detection:
 #### `lib/setup.sh`
 Setup wizard steps (in order):
 1. `step_check_existing_credentials()` - Warn if overwriting
-2. `step_build_station()` - Build station binary and chip_id
-3. `step_select_region()` - TTN region selection (eu1/nam1/au1)
-4. `step_detect_eui()` - Auto-detect or manual EUI entry
-5. `step_show_registration_instructions()` - TTN Console guidance
-6. `step_get_cups_key()` - Collect CUPS API key
-7. `step_setup_trust_cert()` - Download/copy trust certificate
-8. `step_select_log_location()` - Choose log file path
-9. `step_detect_gps()` - GPS port detection
-10. `step_create_credentials()` - Write credential files and station.conf
-11. `step_setup_service()` - Optional systemd setup
+2. `step_select_board()` - Select concentrator board (GPIO config)
+3. `step_build_station()` - Build station binary and chip_id
+4. `step_select_region()` - TTN region selection (eu1/nam1/au1)
+5. `step_detect_eui()` - Auto-detect or manual EUI entry
+6. `step_show_registration_instructions()` - TTN Console guidance
+7. `step_get_cups_key()` - Collect CUPS API key
+8. `step_setup_trust_cert()` - Download/copy trust certificate
+9. `step_select_log_location()` - Choose log file path
+10. `step_detect_gps()` - GPS port detection
+11. `step_create_credentials()` - Write credential files and station.conf
+12. `step_setup_service()` - Optional systemd setup (includes startup verification)
+
+Additional functions:
+- `verify_gateway_started()` - Waits up to 30s for "Concentrator started" in logs
 
 Main function: `run_setup()` - Orchestrates all steps with logging
 
@@ -126,6 +153,8 @@ Uninstall functions:
 Set in `setup-gateway.sh`, used across libs:
 - `SCRIPT_DIR`, `LIB_DIR`, `CUPS_DIR`, `BUILD_DIR`
 - `STATION_BINARY`, `CHIP_ID_TOOL`, `RESET_LGW_SCRIPT`
+- `BOARD_CONF`, `BOARD_CONF_TEMPLATE` - Board configuration files
+- `BOARD_TYPE`, `SX1302_RESET_BCM`, `SX1302_POWER_EN_BCM` - Board GPIO settings
 - `TTN_REGION`, `CUPS_URI`, `GATEWAY_EUI`, `CUPS_KEY`
 - `LOG_FILE`, `GPS_DEVICE`, `MODE`, `SKIP_DEPS`
 
