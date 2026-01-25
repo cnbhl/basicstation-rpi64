@@ -256,13 +256,34 @@ Test scripts for validating setup functionality:
 
 **Running tests:**
 ```bash
-./tests/test-setup.sh           # Unit tests
-./tests/test-non-interactive.sh # Integration tests
+./tests/test-setup.sh           # Unit tests (15 tests)
+./tests/test-non-interactive.sh # Integration tests (14 tests)
 ```
+
+**Unit tests (`test-setup.sh`)** cover:
+- EUI validation (valid/invalid 16-char hex)
+- Region validation (eu1, nam1, au1)
+- Board type validation (WM1302, PG1302, etc.)
+- GPIO pin validation (BCM 0-27)
+- Board config lookup (GPIO pins for each board)
+- Sed sanitization (escaping `/` and `&`)
+- Non-interactive confirm behavior
+- File/directory/command existence checks
+
+**Integration tests (`test-non-interactive.sh`)** cover:
+- Help flag displays all non-interactive options
+- Missing required args error handling
+- Invalid board/region/EUI rejection
+- CUPS key and key-file validation
+- Service flag requirement
+- GPS option documentation
+- Force and skip-build flags
 
 **Test helpers (in mock-environment.sh):**
 - `setup_mock_environment()` / `cleanup_mock_environment()` - Setup/teardown mocks
 - `assert_true()`, `assert_equals()`, `assert_file_exists()`, `assert_file_contains()` - Test assertions
+
+**Note on bash arithmetic:** Tests use pre-increment `(( ++VAR ))` instead of post-increment `(( VAR++ ))` to avoid exit code 1 with `set -e` when counters start at 0.
 
 ## Running the Station
 

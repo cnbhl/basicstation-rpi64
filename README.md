@@ -29,6 +29,50 @@ The setup wizard builds the station, detects your Gateway EUI, configures TTN CU
 ./setup-gateway.sh --skip-gps   # Skip GPS auto-detection
 ```
 
+### Non-Interactive Mode
+
+For CI/CD pipelines and scripted deployments:
+
+```bash
+# Minimal automated deployment
+./setup-gateway.sh -y \
+    --board WM1302 \
+    --region eu1 \
+    --eui auto \
+    --cups-key "NNSXS.xxx..." \
+    --service
+
+# Full automation with all options
+./setup-gateway.sh --non-interactive \
+    --force \
+    --board PG1302 \
+    --region nam1 \
+    --eui AABBCCDDEEFF0011 \
+    --cups-key-file /etc/ttn/cups.key \
+    --log-file /var/log/station.log \
+    --gps /dev/ttyAMA0 \
+    --service \
+    --skip-build
+
+# Non-interactive uninstall
+./setup-gateway.sh --uninstall -y
+```
+
+**Non-interactive options:**
+| Option | Description |
+|--------|-------------|
+| `-y, --non-interactive` | Enable non-interactive mode |
+| `--force` | Overwrite existing credentials |
+| `--board <type>` | Board type: WM1302, PG1302, LR1302, SX1302_WS, SEMTECH |
+| `--region <code>` | TTN region: eu1, nam1, au1 |
+| `--eui <hex\|auto>` | Gateway EUI (16 hex chars) or 'auto' |
+| `--cups-key <key>` | CUPS API key |
+| `--cups-key-file <path>` | Read CUPS key from file |
+| `--log-file <path>` | Station log file path |
+| `--gps <device\|none>` | GPS device path or 'none' |
+| `--service / --no-service` | Enable/disable systemd service |
+| `--skip-build` | Skip build if binary exists |
+
 ## Supported Boards
 
 | Board | Manufacturer | Status |
@@ -87,9 +131,24 @@ basicstation/
 │   ├── gps.sh                    # GPS port detection
 │   ├── setup.sh                  # Setup wizard steps
 │   └── uninstall.sh              # Uninstall functions
+├── tests/                        # Test suite
+│   ├── test-setup.sh             # Unit tests (15 tests)
+│   ├── test-non-interactive.sh   # Integration tests (14 tests)
+│   └── mock-environment.sh       # Mock hardware environment
 ├── tools/chip_id/                # EUI detection (from sx1302_hal)
 └── examples/corecell/cups-ttn/   # TTN CUPS configuration
 ```
+
+## Testing
+
+Run the test suite (no hardware required):
+
+```bash
+./tests/test-setup.sh           # Unit tests for validation functions
+./tests/test-non-interactive.sh # Integration tests for CLI argument parsing
+```
+
+Tests use a mock environment that simulates `chip_id`, `sudo`, and `systemctl` for CI/CD compatibility.
 
 ## Raspberry Pi GPIO Support
 
