@@ -18,48 +18,69 @@ uninstall_service() {
     local service_name="basicstation.service"
     local service_file="/etc/systemd/system/$service_name"
 
-    print_header "Checking systemd service..."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_header "Checking systemd service..."
+    fi
 
     if [[ ! -f "$service_file" ]]; then
-        echo "  Service file not found at $service_file"
-        echo "  Skipping service removal."
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo "  Service file not found at $service_file"
+            echo "  Skipping service removal."
+        fi
+        log_info "Service file not found, skipping"
         return 0
     fi
 
-    echo "  Found: $service_file"
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo "  Found: $service_file"
 
-    if service_is_active "$service_name"; then
-        echo "  Service is currently running."
-    fi
+        if service_is_active "$service_name"; then
+            echo "  Service is currently running."
+        fi
 
-    if ! confirm "Remove the systemd service?"; then
-        echo "  Skipping service removal."
-        return 0
+        # In interactive mode, ask for confirmation (default: no)
+        if ! confirm "Remove the systemd service?"; then
+            echo "  Skipping service removal."
+            return 0
+        fi
+    else
+        log_info "Removing systemd service: $service_name"
     fi
 
     # Stop the service if running
     if service_is_active "$service_name"; then
-        echo "  Stopping service..."
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo "  Stopping service..."
+        fi
         sudo systemctl stop "$service_name" || true
     fi
 
     # Disable the service if enabled
     if service_is_enabled "$service_name"; then
-        echo "  Disabling service..."
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo "  Disabling service..."
+        fi
         sudo systemctl disable "$service_name" || true
     fi
 
     # Remove the service file
-    echo "  Removing service file..."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo "  Removing service file..."
+    fi
     sudo rm -f "$service_file"
     sudo systemctl daemon-reload
 
-    print_success "  Service removed."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_success "  Service removed."
+    fi
+    log_info "Service removed"
 }
 
 # Remove credential files
 uninstall_credentials() {
-    print_header "Checking credential files..."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_header "Checking credential files..."
+    fi
 
     local files_found=false
     local cred_files=(
@@ -70,40 +91,60 @@ uninstall_credentials() {
         "$CUPS_DIR/tc.key"
         "$CUPS_DIR/tc.uri"
         "$CUPS_DIR/tc.trust"
+        "$CUPS_DIR/board.conf"
     )
 
-    echo "  Checking in: $CUPS_DIR"
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo "  Checking in: $CUPS_DIR"
+    fi
 
     for f in "${cred_files[@]}"; do
         if [[ -f "$f" ]]; then
-            echo "  Found: $(basename "$f")"
+            if [[ "$NON_INTERACTIVE" != true ]]; then
+                echo "  Found: $(basename "$f")"
+            fi
             files_found=true
         fi
     done
 
     if [[ "$files_found" == false ]]; then
-        echo "  No credential files found."
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo "  No credential files found."
+        fi
+        log_info "No credential files found"
         return 0
     fi
 
-    if ! confirm "Remove these credential files?"; then
-        echo "  Skipping credential removal."
-        return 0
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        if ! confirm "Remove these credential files?"; then
+            echo "  Skipping credential removal."
+            return 0
+        fi
+    else
+        log_info "Removing credential files"
     fi
 
     for f in "${cred_files[@]}"; do
         if [[ -f "$f" ]]; then
             rm -f "$f"
-            echo "  Removed: $(basename "$f")"
+            if [[ "$NON_INTERACTIVE" != true ]]; then
+                echo "  Removed: $(basename "$f")"
+            fi
+            log_debug "Removed: $f"
         fi
     done
 
-    print_success "  Credential files removed."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_success "  Credential files removed."
+    fi
+    log_info "Credential files removed"
 }
 
 # Remove log files
 uninstall_logs() {
-    print_header "Checking log files..."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_header "Checking log files..."
+    fi
 
     local log_files=(
         "/var/log/station.log"
@@ -114,21 +155,30 @@ uninstall_logs() {
 
     for f in "${log_files[@]}"; do
         if [[ -f "$f" ]]; then
-            echo "  Found: $f"
+            if [[ "$NON_INTERACTIVE" != true ]]; then
+                echo "  Found: $f"
+            fi
             files_found=true
         fi
     done
 
     if [[ "$files_found" == false ]]; then
-        echo "  No log files found."
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo "  No log files found."
+        fi
+        log_info "No log files found"
         return 0
     fi
 
-    print_warning "  Note: Log files may contain useful diagnostic information."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_warning "  Note: Log files may contain useful diagnostic information."
 
-    if ! confirm "Remove log files?"; then
-        echo "  Skipping log removal."
-        return 0
+        if ! confirm "Remove log files?"; then
+            echo "  Skipping log removal."
+            return 0
+        fi
+    else
+        log_info "Removing log files"
     fi
 
     for f in "${log_files[@]}"; do
@@ -138,16 +188,24 @@ uninstall_logs() {
             else
                 rm -f "$f"
             fi
-            echo "  Removed: $f"
+            if [[ "$NON_INTERACTIVE" != true ]]; then
+                echo "  Removed: $f"
+            fi
+            log_debug "Removed: $f"
         fi
     done
 
-    print_success "  Log files removed."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_success "  Log files removed."
+    fi
+    log_info "Log files removed"
 }
 
 # Remove build artifacts
 uninstall_build() {
-    print_header "Checking build artifacts..."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_header "Checking build artifacts..."
+    fi
 
     local build_dirs=(
         "$SCRIPT_DIR/build-corecell-std"
@@ -158,31 +216,46 @@ uninstall_build() {
 
     for d in "${build_dirs[@]}"; do
         if [[ -d "$d" ]]; then
-            echo "  Found: $d"
+            if [[ "$NON_INTERACTIVE" != true ]]; then
+                echo "  Found: $d"
+            fi
             dirs_found=true
         fi
     done
 
     if [[ "$dirs_found" == false ]]; then
-        echo "  No build directories found."
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo "  No build directories found."
+        fi
+        log_info "No build directories found"
         return 0
     fi
 
-    print_warning "  Note: Removing build artifacts will require a full rebuild."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_warning "  Note: Removing build artifacts will require a full rebuild."
 
-    if ! confirm "Remove build directories?"; then
-        echo "  Skipping build artifact removal."
-        return 0
+        if ! confirm "Remove build directories?"; then
+            echo "  Skipping build artifact removal."
+            return 0
+        fi
+    else
+        log_info "Removing build artifacts"
     fi
 
     for d in "${build_dirs[@]}"; do
         if [[ -d "$d" ]]; then
             rm -rf "$d"
-            echo "  Removed: $d"
+            if [[ "$NON_INTERACTIVE" != true ]]; then
+                echo "  Removed: $d"
+            fi
+            log_debug "Removed: $d"
         fi
     done
 
-    print_success "  Build artifacts removed."
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_success "  Build artifacts removed."
+    fi
+    log_info "Build artifacts removed"
 }
 
 #######################################
@@ -190,44 +263,62 @@ uninstall_build() {
 #######################################
 
 run_uninstall() {
-    print_banner "LoRa Basic Station Uninstall"
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_banner "LoRa Basic Station Uninstall"
+    fi
 
     log_info "=== Starting uninstall wizard ==="
 
-    echo "This will remove the Basic Station installation components."
-    echo "You will be prompted before each removal step."
-    echo ""
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo "This will remove the Basic Station installation components."
+        echo "You will be prompted before each removal step."
+        echo ""
 
-    if ! confirm "Proceed with uninstall?"; then
-        log_info "Uninstall cancelled by user"
-        echo "Uninstall cancelled."
-        exit 0
+        if ! confirm "Proceed with uninstall?"; then
+            log_info "Uninstall cancelled by user"
+            echo "Uninstall cancelled."
+            exit 0
+        fi
+        echo ""
+    else
+        log_info "Running uninstall in non-interactive mode (all steps will proceed)"
     fi
-
-    echo ""
 
     uninstall_service
     log_debug "Completed: uninstall_service"
-    echo ""
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo ""
+    fi
 
     uninstall_credentials
     log_debug "Completed: uninstall_credentials"
-    echo ""
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo ""
+    fi
 
     uninstall_logs
     log_debug "Completed: uninstall_logs"
-    echo ""
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo ""
+    fi
 
     uninstall_build
     log_debug "Completed: uninstall_build"
-    echo ""
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        echo ""
+    fi
 
     log_info "=== Uninstall wizard completed ==="
-    print_banner "Uninstall Complete"
-    echo "The following may still remain:"
-    echo "  - Source code in: $SCRIPT_DIR"
-    echo "  - Dependencies in: $SCRIPT_DIR/deps/"
-    echo ""
-    echo "To completely remove, delete the repository folder:"
-    print_warning "  rm -rf $SCRIPT_DIR"
+
+    if [[ "$NON_INTERACTIVE" != true ]]; then
+        print_banner "Uninstall Complete"
+        echo "The following may still remain:"
+        echo "  - Source code in: $SCRIPT_DIR"
+        echo "  - Dependencies in: $SCRIPT_DIR/deps/"
+        echo ""
+        echo "To completely remove, delete the repository folder:"
+        print_warning "  rm -rf $SCRIPT_DIR"
+    else
+        log_info "Uninstall completed successfully"
+    fi
 }

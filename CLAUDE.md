@@ -40,12 +40,53 @@ cd regr-tests
 The main development work in this fork is in:
 
 ### `setup-gateway.sh`
-Main entry point that sources modular libraries from `lib/`. Supports:
+Main entry point that sources modular libraries from `lib/`. Supports both interactive and non-interactive modes.
+
+**General Options:**
 - `--help` - Show usage
 - `--uninstall` - Remove installation
 - `-v, --verbose` - Enable debug logging
 - `--skip-deps` - Skip dependency checks
 - `--skip-gps` - Skip GPS auto-detection
+
+**Non-Interactive Mode Options** (for CI/CD and scripted deployments):
+- `-y, --non-interactive` - Enable non-interactive mode (required for automation)
+- `--force` - Overwrite existing credentials without prompting
+- `--board <type>` - Board type: WM1302, PG1302, LR1302, SX1302_WS, SEMTECH
+- `--region <code>` - TTN region: eu1, nam1, au1
+- `--eui <hex|auto>` - Gateway EUI (16 hex chars) or 'auto' for hardware detection
+- `--cups-key <key>` - CUPS API key
+- `--cups-key-file <path>` - Read CUPS key from file (alternative to --cups-key)
+- `--log-file <path>` - Station log file path
+- `--gps <device|none>` - GPS device path or 'none' to disable
+- `--service` / `--no-service` - Enable/disable systemd service setup
+- `--skip-build` - Skip build if binary exists
+
+**Non-Interactive Mode Examples:**
+```bash
+# Minimal automated deployment
+./setup-gateway.sh -y \
+    --board WM1302 \
+    --region eu1 \
+    --eui auto \
+    --cups-key "NNSXS.xxx..." \
+    --service
+
+# Full automation with all options
+./setup-gateway.sh --non-interactive \
+    --force \
+    --board PG1302 \
+    --region nam1 \
+    --eui AABBCCDDEEFF0011 \
+    --cups-key-file /etc/ttn/cups.key \
+    --log-file /var/log/station.log \
+    --gps /dev/ttyAMA0 \
+    --service \
+    --skip-build
+
+# Non-interactive uninstall
+./setup-gateway.sh --uninstall -y
+```
 
 ### Board Configuration System
 The setup wizard supports multiple SX1302 concentrator boards with different GPIO pinouts:
@@ -97,6 +138,10 @@ Core utilities including:
 Input validation:
 - `validate_eui(eui)` - Validate 16-char hex Gateway EUI
 - `validate_not_empty(value)` - Check non-empty string
+- `validate_gpio(pin)` - Validate BCM GPIO pin number (0-27)
+- `validate_region(region)` - Validate TTN region code (eu1, nam1, au1)
+- `validate_board_type(board)` - Validate board type against template
+- `get_board_config(board)` - Get GPIO config for board, sets `SX1302_RESET_BCM`, `SX1302_POWER_EN_BCM`, `SX1261_RESET_BCM`
 - `sanitize_for_sed(input)` - Escape special chars for sed
 
 #### `lib/file_ops.sh`
@@ -158,6 +203,15 @@ Set in `setup-gateway.sh`, used across libs:
 - `TTN_REGION`, `CUPS_URI`, `GATEWAY_EUI`, `CUPS_KEY`
 - `LOG_FILE`, `GPS_DEVICE`, `MODE`, `SKIP_DEPS`
 
+**Non-Interactive Mode Variables:**
+- `NON_INTERACTIVE` - Boolean, true when -y/--non-interactive is set
+- `FORCE_OVERWRITE` - Boolean, true when --force is set
+- `CLI_BOARD`, `CLI_REGION`, `CLI_EUI` - CLI-provided configuration values
+- `CLI_CUPS_KEY`, `CLI_CUPS_KEY_FILE` - CUPS key from CLI or file
+- `CLI_LOG_FILE`, `CLI_GPS` - Log and GPS settings from CLI
+- `CLI_SERVICE` - "yes", "no", or "" for service setup preference
+- `CLI_SKIP_BUILD` - Boolean, skip build if binary exists
+
 ### Security Patterns
 - `set -euo pipefail` for strict error handling
 - Atomic file writes via temp file + `mv`
@@ -193,6 +247,22 @@ Standalone EUI detection tool derived from Semtech sx1302_hal:
 - `chip_id.c` - Reads EUI from SX1302 via SPI
 - `log_stub.c` - Logging stub for standalone build
 - Built against `build-corecell-std/lib/liblgw1302.a`
+
+### `tests/` - Test Scripts
+Test scripts for validating setup functionality:
+- `test-setup.sh` - Unit tests for validation and utility functions (no hardware required)
+- `test-non-interactive.sh` - Integration tests for non-interactive mode argument parsing
+- `mock-environment.sh` - Mock environment for testing without hardware (creates fake chip_id, sudo, systemctl)
+
+**Running tests:**
+```bash
+./tests/test-setup.sh           # Unit tests
+./tests/test-non-interactive.sh # Integration tests
+```
+
+**Test helpers (in mock-environment.sh):**
+- `setup_mock_environment()` / `cleanup_mock_environment()` - Setup/teardown mocks
+- `assert_true()`, `assert_equals()`, `assert_file_exists()`, `assert_file_contains()` - Test assertions
 
 ## Running the Station
 
