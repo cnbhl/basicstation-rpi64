@@ -23,10 +23,10 @@ Analysis of [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/
 **File**: `src/sx130xconf.c`
 **Status**: Applied on `feature/fine-timestamp` branch. Zero-initializes `ifconf` struct before JSON parsing to prevent stale/garbage values in fields not explicitly set by the config.
 
-### 2. SF5/SF6 spreading factor support
+### ~~2. SF5/SF6 spreading factor support~~ DONE
 **Commit**: `799ac21` (partial - just `parse_spread_factor()`)
 **File**: `src/sx130xconf.c`
-**Change**: Adds SF5 and SF6 inside `#if defined(CFG_sx1302)`. SX1303 (and some SX1302 revisions) support these. Without this, an LNS sending SF5/SF6 channel config crashes the station with "Illegal spread factor." Forward compatibility for LoRaWAN RP2 1.0.5 datarates.
+**Status**: Applied on `feature/fine-timestamp` branch. Adds SF5/SF6 cases inside `#if defined(CFG_sx1302)` to prevent crash when LNS sends these datarates. HAL V2.1.0 defines `DR_LORA_SF5`/`DR_LORA_SF6`.
 
 ### 3. US915 EIRP increase to 36 dBm
 **Commit**: `0a54574`

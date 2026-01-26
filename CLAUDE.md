@@ -265,6 +265,9 @@ Cherry-picked from MultiTech fork (`eee8f10`). If the SX130x trigger counter sto
 ### ifconf Zero-Initialization
 Cherry-picked from MultiTech fork (`64f634f`, partial). Adds `memset(ifconf, 0, sizeof(struct lgw_conf_rxif_s))` at the start of `parse_ifconf()` in `src/sx130xconf.c`. Prevents stale or uninitialized values in channel configuration fields not explicitly set by JSON from the LNS.
 
+### SF5/SF6 Spreading Factor Support
+Cherry-picked from MultiTech fork (`799ac21`, partial). Adds SF5 and SF6 cases to `parse_spread_factor()` in `src/sx130xconf.c` inside `#if defined(CFG_sx1302)`. The SX1303 (and some SX1302 revisions) support SF5/SF6, defined in LoRaWAN RP2 1.0.5. Without this, an LNS sending SF5/SF6 channel config crashes the station with "Illegal spread factor."
+
 ### `tests/` - Test Scripts
 Test scripts for validating setup functionality:
 - `test-setup.sh` - Unit tests for validation and utility functions (no hardware required)

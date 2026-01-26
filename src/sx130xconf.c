@@ -173,6 +173,10 @@ static int parse_bandwidth (ujdec_t* D) {
 static int parse_spread_factor (ujdec_t* D) {
     sL_t sf = uj_int(D);
     switch(sf) {
+#if defined(CFG_sx1302)
+    case  5: return DR_LORA_SF5;  break;
+    case  6: return DR_LORA_SF6;  break;
+#endif
     case  7: return DR_LORA_SF7;  break;
     case  8: return DR_LORA_SF8;  break;
     case  9: return DR_LORA_SF9;  break;
@@ -180,7 +184,7 @@ static int parse_spread_factor (ujdec_t* D) {
     case 11: return DR_LORA_SF11; break;
     case 12: return DR_LORA_SF12; break;
     default:
-        uj_error(D, "Illegal spread_factor value: %ld (must be 7,..,12)", sf);
+        uj_error(D, "Illegal spread_factor value: %ld (must be 5,..,12)", sf);
         return DR_UNDEFINED; // NOT REACHED
     }
 }
