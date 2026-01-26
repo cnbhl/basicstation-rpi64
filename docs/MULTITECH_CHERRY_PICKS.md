@@ -33,10 +33,10 @@ Analysis of [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/
 **File**: `src/s2e.c`
 **Change**: Increases US915 default EIRP from 26 to 36 dBm. FCC allows 30 dBm conducted + 6 dBi antenna gain. Setting 36 here supports +3, +6, or +10 dBi antennas since antenna gain is subtracted in the radio layer.
 
-### 4. SX1302 LBT error handling fix
-**Commit**: `20c64c9` (partial - just the `ral_lgw.c` error check)
-**File**: `src/ral_lgw.c`
-**Change**: Separates SX1302 vs SX1301 `lgw_send()` error paths with proper `#if/#else/#endif`. SX1302 HAL returns `LGW_LBT_NOT_ALLOWED` (not `LGW_LBT_ISSUE`). Upstream code falls through incorrectly.
+### ~~4. SX1302 LBT error handling fix~~ DONE
+**Commit**: `20c64c9` (partial)
+**Files**: `src/ral_lgw.c`, `src-linux/ral_slave.c`
+**Status**: Applied on `feature/fine-timestamp` branch. Separated SX1302 (`LGW_LBT_NOT_ALLOWED`) vs SX1301 (`LGW_LBT_ISSUE`) error paths in both single-process and slave mode. Note: values are numerically identical (both `1`) due to our HAL patch alias, but the code structure is now correct.
 
 ### 5. Antenna gain parsing from config
 **Commit**: `38e5fa6` (partial - just the `antenna_gain` JSON case, skip temp comp)

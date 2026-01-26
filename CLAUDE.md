@@ -268,6 +268,9 @@ Cherry-picked from MultiTech fork (`64f634f`, partial). Adds `memset(ifconf, 0, 
 ### SF5/SF6 Spreading Factor Support
 Cherry-picked from MultiTech fork (`799ac21`, partial). Adds SF5 and SF6 cases to `parse_spread_factor()` in `src/sx130xconf.c` inside `#if defined(CFG_sx1302)`. The SX1303 (and some SX1302 revisions) support SF5/SF6, defined in LoRaWAN RP2 1.0.5. Without this, an LNS sending SF5/SF6 channel config crashes the station with "Illegal spread factor."
 
+### SX1302 LBT Error Handling Fix
+Cherry-picked from MultiTech fork (`20c64c9`, partial). Separates SX1302 and SX1301 `lgw_send()` error paths in `src/ral_lgw.c` and `src-linux/ral_slave.c`. SX1302 HAL returns `LGW_LBT_NOT_ALLOWED` while SX1301 returns `LGW_LBT_ISSUE`. Upstream shared a single error check which used the wrong constant for SX1302 builds (worked by accident since both are `1` via our HAL patch alias).
+
 ### `tests/` - Test Scripts
 Test scripts for validating setup functionality:
 - `test-setup.sh` - Unit tests for validation and utility functions (no hardware required)
