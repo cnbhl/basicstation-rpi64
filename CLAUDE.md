@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+**Repository**: [cnbhl/basicstation-rpi64](https://github.com/cnbhl/basicstation-rpi64)
+
 This is a fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (Release 2.0.6) that adds:
 - Raspberry Pi 5 GPIO compatibility
 - Automated TTN CUPS setup via `setup-gateway.sh`
@@ -331,3 +333,4 @@ Examples: Tag `2.0.6-cnbhl.1.0` → Title "Release 2.0.6-cnbhl.1.0"
 - **Master branch is protected**: Cannot push directly to master
 - **All changes require a PR**: Create a feature/fix branch, then open a pull request
 - **Branch naming**: Use prefixes like `fix/`, `feature/`, `docs/` (e.g., `fix/skip-gps-option`)
+- **Before every commit**: Review CLAUDE.md and update it if the commit introduces new features, changes conventions, modifies the project structure, or adds/removes files that are documented here. Keep CLAUDE.md as the single source of truth for project context.

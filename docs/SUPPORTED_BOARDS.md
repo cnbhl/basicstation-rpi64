@@ -142,7 +142,7 @@ If you have a working configuration for a board not in the list, please contribu
 1. Fork this repository on GitHub
 2. Add your board to `examples/corecell/cups-ttn/board.conf.template`
 3. Test that `./setup-gateway.sh` works with your board
-4. Submit a Pull Request to [github.com/cnbhl/basicstation](https://github.com/cnbhl/basicstation)
+4. Submit a Pull Request to [github.com/cnbhl/basicstation-rpi64](https://github.com/cnbhl/basicstation-rpi64)
 
 Include in your PR:
 - Board manufacturer and model name

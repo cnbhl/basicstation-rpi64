@@ -12,8 +12,8 @@ For upstream documentation: [doc.sm.tc/station](https://doc.sm.tc/station)
 ## Quick Start
 
 ```bash
-git clone https://github.com/cnbhl/basicstation.git
-cd basicstation
+git clone https://github.com/cnbhl/basicstation-rpi64.git
+cd basicstation-rpi64
 ./setup-gateway.sh
 ```
 
