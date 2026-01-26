@@ -189,6 +189,7 @@ static int parse_spread_factor (ujdec_t* D) {
 static void parse_ifconf (ujdec_t* D, struct lgw_conf_rxif_s* ifconf) {
     ujcrc_t field;
     uj_enterObject(D);
+    memset(ifconf, 0, sizeof(struct lgw_conf_rxif_s));
     while( (field = uj_nextField(D)) ) {
         switch(field) {
         case J_enable:        { ifconf->enable         = uj_bool(D); break; }

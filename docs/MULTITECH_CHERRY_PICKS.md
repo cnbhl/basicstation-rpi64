@@ -18,10 +18,10 @@ Analysis of [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/
 
 ## New Cherry-Picks - Low Effort
 
-### 1. ifconf memset initialization
+### ~~1. ifconf memset initialization~~ DONE
 **Commit**: `64f634f` (partial - just the memset line, skip dac_gain=3 SX1301 part)
 **File**: `src/sx130xconf.c`
-**Change**: Adds `memset(ifconf, 0, sizeof(struct lgw_conf_rxif_s))` at start of `parse_ifconf()`. Prevents uninitialized fields in channel config when JSON doesn't set every field.
+**Status**: Applied on `feature/fine-timestamp` branch. Zero-initializes `ifconf` struct before JSON parsing to prevent stale/garbage values in fields not explicitly set by the config.
 
 ### 2. SF5/SF6 spreading factor support
 **Commit**: `799ac21` (partial - just `parse_spread_factor()`)

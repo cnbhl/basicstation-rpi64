@@ -262,6 +262,9 @@ Cherry-picked from MultiTech fork (`eee8f10`). If the SX130x trigger counter sto
 
 **File modified:** `src/timesync.c` - Added `exit(EXIT_FAILURE)` with `CRITICAL` log after excessive drift threshold.
 
+### ifconf Zero-Initialization
+Cherry-picked from MultiTech fork (`64f634f`, partial). Adds `memset(ifconf, 0, sizeof(struct lgw_conf_rxif_s))` at the start of `parse_ifconf()` in `src/sx130xconf.c`. Prevents stale or uninitialized values in channel configuration fields not explicitly set by JSON from the LNS.
+
 ### `tests/` - Test Scripts
 Test scripts for validating setup functionality:
 - `test-setup.sh` - Unit tests for validation and utility functions (no hardware required)
