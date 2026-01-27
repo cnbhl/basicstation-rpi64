@@ -828,35 +828,47 @@ int sys_gpsEnabled () {
 }
 
 
+// Check if GPS was configured in station.conf
+// With CFG_usegpsd: gpsEnabled flag set during config parsing
+// Without: device pointer set by sys_enableGPS(device)
+static int gps_was_configured () {
+#if defined(CFG_usegpsd)
+    extern u1_t gpsEnabled;
+    return gpsEnabled;
+#else
+    return device != NULL;
+#endif
+}
+
+
 // Set GPS enabled state from LNS router_config
 // This OVERRIDES the station.conf setting
 // Returns 1 if state changed, 0 if no change
 int sys_setGPSEnabled (int enabled) {
-    extern u1_t gpsEnabled;  // from station.conf
     int new_state = enabled ? 1 : 0;
     int old_effective = sys_gpsEnabled();
-    
+
     // Check if this is actually a change
     if( gps_lns_override == new_state )
         return 0;  // no change in LNS override
-    
+
     gps_lns_override = new_state;
-    
+
     // Only take action if effective state changed
     if( old_effective == new_state )
         return 0;  // effective state didn't change
-    
+
     if( !new_state ) {
         // LNS is disabling GPS - override station.conf
         LOG(MOD_GPS|INFO, "GPS disabled by LNS (overrides station.conf)");
         // Track if GPS was configured so we can restart when re-enabled
-        if( gpsEnabled )
+        if( gps_was_configured() )
             gps_was_running = 1;
         sys_disableGPS();
     } else {
         // LNS is re-enabling GPS
         // Restart GPS if it was running or if station.conf had it enabled
-        if( gps_was_running || gpsEnabled ) {
+        if( gps_was_running || gps_was_configured() ) {
             LOG(MOD_GPS|INFO, "GPS re-enabled by LNS");
             gps_was_running = 0;
             if( !gps_reopen() ) {
