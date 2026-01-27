@@ -39,7 +39,11 @@
 #include "rt.h"
 
 
+#if defined(CFG_usegpsd)
+int sys_enableGPS () {
+#else
 int sys_enableGPS (str_t _device) {
+#endif
     LOG(MOD_GPS|ERROR, "GPS function not compiled.");
     return 0;
 }

@@ -240,7 +240,80 @@ EOF
     echo ""
 }
 
+step_select_gps_mode() {
+    # Non-interactive: use CLI flag
+    if [[ -n "$CLI_GPS_MODE" ]]; then
+        USE_GPSD="$CLI_GPS_MODE"
+        log_info "GPS mode from CLI: $USE_GPSD"
+        return 0
+    fi
+
+    if [[ "$NON_INTERACTIVE" == true ]]; then
+        USE_GPSD="serial"
+        return 0
+    fi
+
+    print_header "Step 2b: GPS Mode"
+    echo ""
+    echo "Choose how the station communicates with your GPS module:"
+    echo ""
+    echo "  1) Direct serial (recommended)"
+    echo "     The station reads NMEA data directly from the GPS serial port."
+    echo "     Simple, no extra dependencies. Best for dedicated gateways."
+    echo ""
+    echo "  2) gpsd daemon"
+    echo "     Uses the gpsd service as an intermediary to the GPS hardware."
+    echo "     Allows multiple applications to share the GPS (e.g., chrony + station)."
+    echo "     Requires: gpsd package installed and running."
+    echo ""
+
+    local choice
+    read -rp "Enter choice [1-2] (default: 1): " choice
+
+    case $choice in
+        2)
+            # Check if gpsd is installed
+            if ! command_exists gpsd; then
+                print_warning "gpsd is not installed. Install with: sudo apt install gpsd gpsd-clients libgps-dev"
+                if ! confirm "Continue with gpsd mode anyway? (you can install it before running the gateway)"; then
+                    USE_GPSD="serial"
+                    return 0
+                fi
+            fi
+            # Check if libgps-dev is installed (needed for build)
+            if ! dpkg -l libgps-dev >/dev/null 2>&1; then
+                print_warning "libgps-dev is not installed. Required for building with gpsd support."
+                echo "Install with: sudo apt install libgps-dev"
+                if ! confirm "Continue anyway?"; then
+                    USE_GPSD="serial"
+                    return 0
+                fi
+            fi
+            USE_GPSD="gpsd"
+            print_success "GPS mode: gpsd"
+            ;;
+        *)
+            USE_GPSD="serial"
+            print_success "GPS mode: direct serial"
+            ;;
+    esac
+    echo ""
+}
+
 step_build_station() {
+    # Determine build variant based on GPS mode
+    local build_variant="std"
+    if [[ "$USE_GPSD" == "gpsd" ]]; then
+        build_variant="stdgpsd"
+    fi
+
+    # Update paths to match the selected variant
+    BUILD_DIR="$SCRIPT_DIR/build-corecell-${build_variant}"
+    STATION_BINARY="$BUILD_DIR/bin/station"
+    CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
+
+    log_info "Build variant: $build_variant (GPS mode: $USE_GPSD)"
+
     # Check if we should skip build
     if [[ "$CLI_SKIP_BUILD" == true ]] && file_exists "$STATION_BINARY"; then
         log_info "Skipping build (--skip-build flag and binary exists)"
@@ -263,11 +336,14 @@ step_build_station() {
         print_header "Step 2: Build the station binary"
         echo ""
         echo "This step will compile the Basic Station software for the SX1302 Corecell platform."
+        if [[ "$build_variant" == "stdgpsd" ]]; then
+            echo "Building with gpsd support (variant: stdgpsd)."
+        fi
         echo ""
         echo "The build process will:"
         echo "  - Download and compile dependencies (mbedTLS, libloragw)"
         echo "  - Compile the Basic Station source code"
-        echo "  - Create the executable at: build-corecell-std/bin/station"
+        echo "  - Create the executable at: build-corecell-${build_variant}/bin/station"
         echo "  - Build the chip_id tool for EUI detection"
         echo ""
     fi
@@ -298,7 +374,7 @@ step_build_station() {
     if [[ "$NON_INTERACTIVE" != true ]]; then
         if ! confirm "Start the build process now?" "y"; then
             echo "Setup cancelled. You can build manually with:"
-            echo "  make platform=corecell variant=std"
+            echo "  make platform=corecell variant=$build_variant"
             exit 0
         fi
         echo ""
@@ -309,7 +385,7 @@ step_build_station() {
     fi
 
     cd "$SCRIPT_DIR"
-    if make platform=corecell variant=std; then
+    if make platform=corecell variant="$build_variant"; then
         if [[ "$NON_INTERACTIVE" != true ]]; then
             echo ""
             print_success "Station build completed successfully."
@@ -318,7 +394,7 @@ step_build_station() {
         build_chip_id || true
     else
         print_error "Build failed. Please check the error messages above."
-        echo "You can try building manually with: make platform=corecell variant=std"
+        echo "You can try building manually with: make platform=corecell variant=$build_variant"
         exit 1
     fi
     if [[ "$NON_INTERACTIVE" != true ]]; then
@@ -953,6 +1029,7 @@ print_summary() {
     echo "  Board:       $BOARD_TYPE"
     echo "  Region:      $TTN_REGION"
     echo "  Gateway EUI: $GATEWAY_EUI"
+    echo "  GPS mode:    $USE_GPSD"
     echo "  GPS device:  ${GPS_DEVICE:-disabled}"
     echo "  Config dir:  $CUPS_DIR"
     echo "  Log file:    $LOG_FILE"
@@ -983,6 +1060,7 @@ print_summary_quiet() {
     log_info "Board: $BOARD_TYPE"
     log_info "Region: $TTN_REGION"
     log_info "Gateway EUI: $GATEWAY_EUI"
+    log_info "GPS mode: $USE_GPSD"
     log_info "GPS device: ${GPS_DEVICE:-disabled}"
     log_info "Config dir: $CUPS_DIR"
     log_info "Log file: $LOG_FILE"
@@ -1016,6 +1094,9 @@ run_setup() {
 
     step_select_board
     log_debug "Completed: select_board"
+
+    step_select_gps_mode
+    log_debug "Completed: select_gps_mode (USE_GPSD=$USE_GPSD)"
 
     step_build_station
     log_debug "Completed: build_station"

@@ -73,7 +73,9 @@ static const char* const SLAVE_ENVS[] = {
 #endif // defined(CFG_ral_master_slave)
 
 static struct logfile logfile;
+#if defined(CFG_usegpsd)
 u1_t  gpsEnabled = 0;
+#endif
 static char* gpsDevice    = NULL;
 static tmr_t startupTmr;
 
@@ -729,13 +731,17 @@ static int parseStationConf () {
                 }
                 case J_gps: {
                     makeFilepath(uj_str(&D),"",&gpsDevice,0);
+#if defined(CFG_usegpsd)
                     gpsEnabled = 1;
+#endif
                     break;
                 }
+#if defined(CFG_usegpsd)
                 case J_gps_enable: {
                     gpsEnabled = uj_bool(&D);
                     break;
                 }
+#endif
                 case J_pps: {
                     str_t mode = uj_str(&D);
                     if( strcmp(mode,"gps") == 0 ) {
@@ -826,54 +832,13 @@ static int parseStationConf () {
 }
 
 
+#if defined(CFG_usegpsd)
+// GPS capability is determined by setup script configuration.
+// The MultiTech-proprietary /var/run/config/device_info.json does not exist on RPi.
 static int deviceGPSSupport () {
-    str_t filename = "/var/run/config/device_info.json";
-    dbuf_t jbuf = sys_readFile(filename);
-    if( jbuf.buf == NULL ) {
-        LOG(MOD_SYS|ERROR, "No such file (or not readable): %s", filename);
-        return 0;
-    }
-    ujdec_t D;
-    uj_iniDecoder(&D, jbuf.buf, jbuf.bufsize);
-    if( uj_decode(&D) ) {
-        LOG(MOD_SYS|ERROR, "Parsing of JSON failed - '%s' ignored", filename);
-        free(jbuf.buf);
-        return 0;
-    }
-    u1_t ccaDisabled=0, dcDisabled=0, dwellDisabled=0;   // fields not present
-    ujcrc_t field;
-    u1_t sys_gpsSupported=0;
-    uj_enterObject(&D);
-    while( (field = uj_nextField(&D)) ) {
-        switch(field) {
-        case J_capabilities: {
-            uj_enterObject(&D);
-            while( (field = uj_nextField(&D)) ) {
-                switch(field) {
-                case J_gps: {
-                    sys_gpsSupported = uj_bool(&D);
-                    break;
-                }
-                default: {
-                    uj_skipValue(&D);
-                    break;
-                }
-                }
-            }
-            uj_exitObject(&D);
-            break;
-        }
-        default: {
-            uj_skipValue(&D);
-            break;
-        }
-        }
-    }
-    uj_exitObject(&D);
-    uj_assertEOF(&D);
-    free(jbuf.buf);
-    return sys_gpsSupported;
+    return 1;
 }
+#endif
 
 
 static struct opts {
@@ -1083,10 +1048,17 @@ static void startupMaster2 (tmr_t* tmr) {
     rt_addFeature("gps-ctrl");  // LNS can control GPS enable/disable
 #endif
     sys_enableCmdFIFO(makeFilepath("~/cmd",".fifo",NULL,0));
+#if defined(CFG_usegpsd)
     if( gpsEnabled && deviceGPSSupport()) {
         rt_addFeature("gps");
         sys_enableGPS();
     }
+#else
+    if( gpsDevice ) {
+        rt_addFeature("gps");
+        sys_enableGPS(gpsDevice);
+    }
+#endif
     sys_iniTC();
     sys_startTC();
     sys_iniCUPS();
