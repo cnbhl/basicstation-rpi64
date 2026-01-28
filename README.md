@@ -2,6 +2,7 @@
 
 Fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (v2.0.6) adding:
 - Raspberry Pi 5 GPIO compatibility
+- **Multi-board support** (Seeed WM1302, Dragino PG1302, Elecrow LR1302, Waveshare SX1302)
 - Automated TTN CUPS setup with `setup-gateway.sh`
 - Automatic Gateway EUI detection from SX1302/SX1303
 - Systemd service configuration
@@ -11,8 +12,8 @@ For upstream documentation: [doc.sm.tc/station](https://doc.sm.tc/station)
 ## Quick Start
 
 ```bash
-git clone https://github.com/cnbhl/basicstation.git
-cd basicstation
+git clone https://github.com/cnbhl/basicstation-rpi64.git
+cd basicstation-rpi64
 ./setup-gateway.sh
 ```
 
@@ -28,10 +29,63 @@ The setup wizard builds the station, detects your Gateway EUI, configures TTN CU
 ./setup-gateway.sh --skip-gps   # Skip GPS auto-detection
 ```
 
+### Non-Interactive Mode
+
+For CI/CD pipelines and scripted deployments:
+
+```bash
+./setup-gateway.sh -y \
+    --board WM1302 \
+    --region eu1 \
+    --eui auto \
+    --cups-key "NNSXS.xxx..." \
+    --service
+```
+
+**Non-interactive options:**
+| Option | Description |
+|--------|-------------|
+| `-y, --non-interactive` | Enable non-interactive mode |
+| `--force` | Overwrite existing credentials |
+| `--board <type>` | Board type: WM1302, PG1302, LR1302, SX1302_WS, SEMTECH |
+| `--region <code>` | TTN region: eu1, nam1, au1 |
+| `--eui <hex\|auto>` | Gateway EUI (16 hex chars) or 'auto' |
+| `--cups-key <key>` | CUPS API key |
+| `--cups-key-file <path>` | Read CUPS key from file |
+| `--log-file <path>` | Station log file path |
+| `--gps <device\|none>` | GPS device path or 'none' |
+| `--service / --no-service` | Enable/disable systemd service |
+| `--skip-build` | Skip build if binary exists |
+
+## Supported Boards
+
+| Board | Manufacturer | Status |
+|-------|--------------|--------|
+| WM1302 | Seeed Studio | Tested |
+| PG1302 | Dragino | Tested |
+| LR1302 | Elecrow | Supported |
+| SX1302 HAT | Waveshare | Supported |
+| CoreCell | Semtech Reference | Supported |
+
+The setup wizard auto-configures GPIO pins for your board. Custom boards can specify pins manually.
+
+See [docs/SUPPORTED_BOARDS.md](docs/SUPPORTED_BOARDS.md) for detailed GPIO pinouts and adding new boards.
+
+## Tested Platforms
+
+| Device | Model | OS | Userspace | Kernel |
+|--------|-------|-----|-----------|--------|
+| Pi Zero W | Rev 1.1 | Raspbian 13 (trixie) | armv6l | armv6l |
+| Pi 4 (32-bit) | Model B Rev 1.4 | Raspbian 13 (trixie) | armhf | aarch64 |
+| Pi 4 (64-bit) | Model B Rev 1.4 | Raspbian 12 (bookworm) | aarch64 | aarch64 |
+| Pi 5 | Model B Rev 1.0 | Debian 12 (bookworm) | aarch64 | aarch64 |
+
+All three ARM userspace architectures are supported: **armv6l** (Pi Zero/1), **armhf** (32-bit Pi 2/3/4), **aarch64** (64-bit Pi 3/4/5).
+
 ## Prerequisites
 
-- Raspberry Pi 3/4/5 with SPI and I2C enabled
-- SX1302/SX1303 concentrator (WM1302, RAK2287, etc.)
+- Raspberry Pi Zero W/3/4/5 with SPI and I2C enabled
+- SX1302/SX1303 concentrator HAT (see supported boards above)
 - Gateway registered on [TTN Console](https://console.cloud.thethings.network/)
 - CUPS API Key from TTN
 
@@ -72,9 +126,24 @@ basicstation/
 │   ├── gps.sh                    # GPS port detection
 │   ├── setup.sh                  # Setup wizard steps
 │   └── uninstall.sh              # Uninstall functions
+├── tests/                        # Test suite
+│   ├── test-setup.sh             # Unit tests (15 tests)
+│   ├── test-non-interactive.sh   # Integration tests (14 tests)
+│   └── mock-environment.sh       # Mock hardware environment
 ├── tools/chip_id/                # EUI detection (from sx1302_hal)
 └── examples/corecell/cups-ttn/   # TTN CUPS configuration
 ```
+
+## Testing
+
+Run the test suite (no hardware required):
+
+```bash
+./tests/test-setup.sh           # Unit tests for validation functions
+./tests/test-non-interactive.sh # Integration tests for CLI argument parsing
+```
+
+Tests use a mock environment that simulates `chip_id`, `sudo`, and `systemctl` for CI/CD compatibility.
 
 ## Raspberry Pi GPIO Support
 

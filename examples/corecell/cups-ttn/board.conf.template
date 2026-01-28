@@ -1,0 +1,21 @@
+# SX1302 Concentrator Board Definitions
+# Format: BOARD_TYPE:DESCRIPTION:SX1302_RESET_BCM:SX1302_POWER_EN_BCM:SX1261_RESET_BCM
+#
+# To add a new board, add a line with the format above.
+# BCM pin numbers refer to the Broadcom GPIO numbering (not physical pin numbers).
+#
+# Sources:
+#   Semtech reference: https://github.com/Lora-net/sx1302_hal
+#   Seeed WM1302: https://wiki.seeedstudio.com/WM1302_module/
+#   Dragino PG1302: https://wiki.dragino.com/xwiki/bin/view/Main/User%20Manual%20for%20All%20Gateway%20models/PG1302/
+#   Elecrow LR1302: https://www.elecrow.com/download/product/CRT01265M/LR1302_LoRaWAN_Hat_for_RPI_DataSheet.pdf
+#   Waveshare SX1302: https://www.waveshare.com/wiki/SX1302_LoRaWAN_Gateway_HAT
+#
+# Semtech Reference Design (for comparison):
+#   SX1302_RESET=23, POWER_EN=18, SX1261_RESET=22, AD5338R=13
+#
+WM1302:Seeed Studio WM1302 (SPI version):17:18:5
+PG1302:Dragino PG1302:23:27:22
+LR1302:Elecrow LR1302:17:18:5
+SX1302_WS:Waveshare SX1302 LoRaWAN Gateway HAT:23:18:22
+SEMTECH:Semtech CoreCell Reference Design:23:18:22

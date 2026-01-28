@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.6-cnbhl.1.0 - 2025-01-25
+
+* feature: Multi-board support with board selection wizard
+* feature: Support for WM1302, PG1302, LR1302, SX1302_WS, and SEMTECH reference boards
+* feature: Custom GPIO pin configuration option
+* feature: Runtime board.conf for GPIO settings (no rebuild required)
+* docs: Added SUPPORTED_BOARDS.md with GPIO pinout reference
+* versioning: New X.Y version format (major.minor)
+
 ## 2.0.6-cnbhl.5 - 2025-01-24
 
 * deps: Extended required dependency checks (gcc, make, curl, sed, grep, tr, cat, cp, mv, chmod, mktemp, tee, stty, timeout, sudo, systemctl)
