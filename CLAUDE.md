@@ -296,6 +296,54 @@ make platform=corecell variant=std CFG_usegpsd=1
 
 **Design doc:** `docs/GPS-PPS-Recovery.md`
 
+### GPS Diagnostics Helper (planned)
+
+**Location:** `tools/check-gps.sh`
+
+Standalone diagnostic script for troubleshooting GPS issues. Separate from setup-gateway.sh
+because GPS diagnostics are operational tasks that may be run repeatedly.
+
+**Planned features:**
+```bash
+./tools/check-gps.sh [OPTIONS]
+  --device <path>    GPS device (default: auto-detect from station.conf or /dev/ttyAMA0)
+  --duration <sec>   Monitoring duration (default: 30)
+  --reset            Send cold start command before monitoring
+  --json             Output in JSON format for scripting
+```
+
+**Diagnostic output:**
+- Satellite count (GPS, GLONASS, Galileo, BeiDou)
+- Signal strength per satellite (dB)
+- Fix status (none/2D/3D)
+- Position if available
+- DOP (dilution of precision)
+- Antenna status
+- Comparison with expected values
+
+**GPS troubleshooting reference:**
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| 0 satellites | Antenna disconnected or no power | Check SMA connectors, antenna power |
+| 1-3 satellites, no fix | Severe sky obstruction | Move antenna to clear sky view |
+| 4+ satellites, no fix, no elev/azimuth | Weak signals, marginal tracking | Improve antenna position, check cable |
+| 4+ satellites, no fix, has elev/azimuth | Waiting for ephemeris | Wait 2-5 minutes for cold start |
+| Fix but high DOP (>5) | Poor satellite geometry | Wait for better satellite positions |
+| Intermittent fix | Partial sky obstruction | Improve antenna sky view |
+
+**Signal strength reference:**
+- < 20 dB: Very weak, unlikely to track
+- 20-30 dB: Weak, marginal tracking
+- 30-40 dB: Good signal
+- 40-50 dB: Excellent signal
+
+**NMEA sentence reference:**
+- `$GxGGA` - Position fix, quality, satellites used, DOP
+- `$GxGSV` - Satellites in view with elevation, azimuth, signal strength
+- `$GxRMC` - Position, velocity, date/time, fix status (A=valid, V=void)
+- `$GPTXT` - Antenna status messages
+
 ### `tools/chip_id/`
 Standalone EUI detection tool derived from Semtech sx1302_hal:
 - `chip_id.c` - Reads EUI from SX1302 via SPI
