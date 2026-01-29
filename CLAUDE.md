@@ -406,6 +406,8 @@ Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://
 |-----|------------------|------|-------------|
 | ifconf memset | `64f634f` (partial) | `src/sx130xconf.c` | Zero-initialize `ifconf` struct before JSON parsing to prevent stale/garbage values in channel config fields not explicitly set by LNS |
 | mbedtls 3.x | `cb9d67b`, `e75b882`, `7a344b8`, `6944075` | `src/tls.c`, `src/cups.c` | Compatibility with mbedtls 3.x including PSA crypto and ECDSA API changes |
+| Duty cycle sliding window | `2e15d53`, `fa0d896`, `27c337e`, `a8bf871`, `ad6d5fb` | `src/s2e.c`, `src/s2e.h`, `src/kwcrc.h` | ETSI-compliant sliding window duty cycle tracking with per-band limits for EU868 |
+| IN865 region | N/A (custom) | `src/s2e.c` | Add IN865 (India 865 MHz) region support with 30 dBm max EIRP |
 
 ### Potential Future Cherry-Picks
 
@@ -451,8 +453,6 @@ Remote: `multitech` pointing to `https://github.com/MultiTechSystems/basicstatio
 - `27c337e` - Implement sliding window duty cycle tracking
 - `a8bf871` - Add duty cycle tests to CI workflow
 - `ad6d5fb` - Fix EU868 independent band tracking per ETSI EN 300 220
-
-### In Progress
 
 **`feature/in865-region`** (1 commit, custom — not from multitech):
 - `02c88ea` - Add IN865 region support
