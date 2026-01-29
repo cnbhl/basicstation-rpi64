@@ -34,12 +34,9 @@
 #include "ral.h"
 #include "sys.h"
 #if defined(CFG_sx1302) || defined(CFG_gps_recovery)
-#if defined(CFG_lgwsim)
-// Mock declaration for simulation builds
+// Forward-declare sx1302_gps_enable - defined in loragw_sx1302.c (lgw1302 HAL)
+// We avoid including loragw_sx1302.h directly due to type dependency issues
 int sx1302_gps_enable(int enable);
-#else
-#include "lgw/loragw_sx1302.h"
-#endif
 #endif
 
 #if defined(CFG_smtcpico)

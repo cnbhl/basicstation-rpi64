@@ -15,6 +15,13 @@
   - Configurable via `router_config`: `duty_cycle_enabled`, `duty_cycle_mode`, `duty_cycle_window`, `duty_cycle_limits`
   - Modes: `legacy`, `band`, `channel`, `power`
   - Added regression tests for EU868, AS923, KR920 duty cycle scenarios
+* feature: GPS/PPS improvements (cherry-pick from MultiTech `feature/gps-recovery`, `feature/gpsd-support`)
+  - Auto-reset GPS/PPS for SX1302/SX1303 if PPS lost >90 seconds
+  - Restart station after 6 consecutive PPS reset failures
+  - GPSD daemon support (compile with `CFG_usegpsd=1`)
+  - LNS can control GPS via `router_config` with `gps_enable` field
+  - Advertises `gps-ctrl` feature flag to LNS
+* fix: Use correct TX command when checking nocca response (cherry-pick from MultiTech `5c54f11`)
 
 ## 2.0.6-cnbhl.1.0 - 2025-01-25
 
