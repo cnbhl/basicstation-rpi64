@@ -238,6 +238,16 @@ GPS_EPOCH=datetime(1980,1,6)
 UPC_EPOCH=datetime(1970,1,1)
 UTC_GPS_LEAPS=18
 
+def get_ws_path(ws):
+    """Get websocket path - compatible with websockets 10.x and 16.x"""
+    # websockets 16.x: path is in ws.request.path
+    if hasattr(ws, 'request') and hasattr(ws.request, 'path'):
+        return ws.request.path
+    # websockets 10.x: path is in ws.path
+    if hasattr(ws, 'path'):
+        return ws.path
+    return '/'
+
 class ServerABC:
     def __init__(self, port:int=6000, tlsidentity:Optional[str]=None, tls_no_ca=False):
         self.server = None
@@ -261,7 +271,7 @@ class ServerABC:
     async def start_server(self):
         self.server = await websockets.serve(self.handle_ws, host='0.0.0.0', port=self.port, **self.tlsctx)
 
-    async def handle_ws(self, ws, path):
+    async def handle_ws(self, ws):
         pass
 
 
@@ -276,7 +286,8 @@ class Infos(ServerABC):
         logger.debug("  Starting INFOS (%s/%s) on Port %d (muxsuri=%s)" %(self.homedir, self.tlsidentity or "", self.port, self.muxsuri))
         await super().start_server()
 
-    async def handle_ws(self, ws, path):
+    async def handle_ws(self, ws):
+        path = get_ws_path(ws)
         logger.debug('. INFOS connect: %s from %r' % (path, ws.remote_address))
         try:
             while True:
@@ -311,15 +322,18 @@ class Muxs(ServerABC):
         self.homedir = homedir
         self.tlsidentity = tlsidentity
         self.router_config = router_config_EU863_6ch
+        self.gps_enable = None  # None = don't include, True/False = include in router_config
+        self.station_features = []  # features reported by station in version message
 
     async def start_server(self):
         logger.debug("  Starting MUXS (%s/%s) on Port %d" %(self.homedir, self.tlsidentity or "", self.port))
         await super().start_server()
 
-    async def handle_ws(self, ws, path):
+    async def handle_ws(self, ws):
+        path = get_ws_path(ws)
         logger.debug('. MUXS connect: %s' % (path,))
         if path != '/router':
-            await ws.close(1020)
+            await ws.close(4000)  # Use valid application-specific close code
         self.ws = ws
         rconf = self.get_router_config()
         await ws.send(json.dumps(rconf))
@@ -328,7 +342,20 @@ class Muxs(ServerABC):
         await self.handle_connection(ws)
 
     def get_router_config(self):
-        return { **self.router_config, 'MuxTime': time.time() }
+        config = { **self.router_config, 'MuxTime': time.time() }
+        # Add gps_enable if explicitly set (None = omit, True/False = include)
+        if self.gps_enable is not None:
+            config['gps_enable'] = self.gps_enable
+        return config
+
+    async def send_router_config(self, gps_enable=None):
+        """Send a new router_config, optionally with gps_enable setting"""
+        if gps_enable is not None:
+            self.gps_enable = gps_enable
+        config = self.get_router_config()
+        if self.ws:
+            await self.ws.send(json.dumps(config))
+            logger.debug('< MUXS: router_config (gps_enable=%s)', self.gps_enable)
 
     async def handle_binaryData(self, ws, data:bytes) -> None:
         pass
@@ -362,6 +389,11 @@ class Muxs(ServerABC):
 
     async def handle_version(self, ws, msg):
         logger.debug('> MUXS: Station Version: %r' % (msg,))
+        features = msg.get('features', '')
+        if features:
+            logger.info('  MUXS: Station features: %s' % features)
+        # Store features for test inspection
+        self.station_features = features.split() if features else []
 
     async def handle_timesync(self, ws, msg):
         logger.debug("> MUXS: %r", msg)

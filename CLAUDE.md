@@ -269,6 +269,81 @@ Sliding window duty cycle tracking for ETSI EN 300 220 compliance. Cherry-picked
 
 **Design doc:** `docs/Duty-Cycle-Sliding-Window-Plan.md`
 
+### GPS/PPS Improvements (cherry-picked from MultiTech)
+
+Enhanced GPS and PPS handling for SX1302/SX1303 concentrators. Cherry-picked from
+[MultiTechSystems/basicstation](https://github.com/MultiTechSystems/basicstation) `feature/gps-recovery` and `feature/gpsd-support` branches.
+
+**Features:**
+- **GPS/PPS Recovery**: Auto-reset GPS/PPS if PPS signal lost for >90 seconds, restart station after 6 consecutive failures
+- **GPSD Support**: Use gpsd daemon instead of direct serial port access (compile with `CFG_usegpsd`)
+- **GPS Control**: LNS can enable/disable GPS via `router_config` with `gps_enable` field
+
+**Source files:**
+- `src/timesync.c` - PPS reset tracking and recovery logic
+- `src-linux/gps.c` - GPSD daemon integration
+- `src-linux/sys_linux.c` - GPS control feature, `gps-ctrl` capability flag
+- `src/s2e.c` - `gps_enable` router_config option parsing
+
+**Environment variables:**
+- `NO_PPS_RESET_THRES` - Seconds without PPS before reset (default: 90)
+- `NO_PPS_RESET_FAIL_THRES` - Max resets before station restart (default: 6)
+
+**Build with GPSD support:**
+```bash
+make platform=corecell variant=std CFG_usegpsd=1
+```
+
+**Design doc:** `docs/GPS-PPS-Recovery.md`
+
+### GPS Diagnostics Helper (planned)
+
+**Location:** `tools/check-gps.sh`
+
+Standalone diagnostic script for troubleshooting GPS issues. Separate from setup-gateway.sh
+because GPS diagnostics are operational tasks that may be run repeatedly.
+
+**Planned features:**
+```bash
+./tools/check-gps.sh [OPTIONS]
+  --device <path>    GPS device (default: auto-detect from station.conf or /dev/ttyAMA0)
+  --duration <sec>   Monitoring duration (default: 30)
+  --reset            Send cold start command before monitoring
+  --json             Output in JSON format for scripting
+```
+
+**Diagnostic output:**
+- Satellite count (GPS, GLONASS, Galileo, BeiDou)
+- Signal strength per satellite (dB)
+- Fix status (none/2D/3D)
+- Position if available
+- DOP (dilution of precision)
+- Antenna status
+- Comparison with expected values
+
+**GPS troubleshooting reference:**
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| 0 satellites | Antenna disconnected or no power | Check SMA connectors, antenna power |
+| 1-3 satellites, no fix | Severe sky obstruction | Move antenna to clear sky view |
+| 4+ satellites, no fix, no elev/azimuth | Weak signals, marginal tracking | Improve antenna position, check cable |
+| 4+ satellites, no fix, has elev/azimuth | Waiting for ephemeris | Wait 2-5 minutes for cold start |
+| Fix but high DOP (>5) | Poor satellite geometry | Wait for better satellite positions |
+| Intermittent fix | Partial sky obstruction | Improve antenna sky view |
+
+**Signal strength reference:**
+- < 20 dB: Very weak, unlikely to track
+- 20-30 dB: Weak, marginal tracking
+- 30-40 dB: Good signal
+- 40-50 dB: Excellent signal
+
+**NMEA sentence reference:**
+- `$GxGGA` - Position fix, quality, satellites used, DOP
+- `$GxGSV` - Satellites in view with elevation, azimuth, signal strength
+- `$GxRMC` - Position, velocity, date/time, fix status (A=valid, V=void)
+- `$GPTXT` - Antenna status messages
+
 ### `tools/chip_id/`
 Standalone EUI detection tool derived from Semtech sx1302_hal:
 - `chip_id.c` - Reads EUI from SX1302 via SPI
@@ -408,6 +483,10 @@ Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://
 | mbedtls 3.x | `cb9d67b`, `e75b882`, `7a344b8`, `6944075` | `src/tls.c`, `src/cups.c` | Compatibility with mbedtls 3.x including PSA crypto and ECDSA API changes |
 | Duty cycle sliding window | `2e15d53`, `fa0d896`, `27c337e`, `a8bf871`, `ad6d5fb` | `src/s2e.c`, `src/s2e.h`, `src/kwcrc.h` | ETSI-compliant sliding window duty cycle tracking with per-band limits for EU868 |
 | IN865 region | N/A (custom) | `src/s2e.c` | Add IN865 (India 865 MHz) region support with 30 dBm max EIRP |
+| GPS/PPS recovery | `9438ff9` | `src/timesync.c` | Auto-reset GPS/PPS for SX1302/SX1303 if PPS lost >90s, restart after 6 failures |
+| GPSD support | `57b2503`, `d429908` | `src-linux/gps.c`, `src-linux/sys_linux.c` | Use gpsd daemon instead of direct serial, compile with `CFG_usegpsd` |
+| GPS control | `dd1035f`, `f5a5f8d` | `src/s2e.c`, `src-linux/sys_linux.c` | LNS can enable/disable GPS via `router_config` with `gps_enable` field |
+| nocca TX fix | `5c54f11` (partial) | `src-linux/ral_master.c` | Use correct command when checking TX response with LBT disabled |
 
 ### Potential Future Cherry-Picks
 
@@ -463,16 +542,15 @@ Remote: `multitech` pointing to `https://github.com/MultiTechSystems/basicstatio
 - `a7df227` - Initialize PSA crypto for mbedtls 3.x TLS 1.3 support
 - `4cae440` - Fix mbedtls 3.x key parsing for DER format credentials
 
-### Candidates (not yet cherry-picked)
-
-**`multitech/feature/gps-recovery`** — GPS/PPS recovery for SX1302/SX1303:
+**`feature/gps-improvements`** (GPS/PPS recovery + GPSD support + GPS control):
 - `9438ff9` - Add GPS/PPS recovery for SX1302/SX1303
-
-**`multitech/feature/gpsd-support`** — GPSD daemon support + GPS control:
 - `57b2503` - Updated GPS handler to use gpsd instead of file stream
 - `d429908` - Add gpsd support with `CFG_usegpsd` compiler flag
 - `dd1035f` - Add GPS control feature for LNS to disable/enable GPS
 - `f5a5f8d` - Improve GPS control and timesync recovery
+- `5c54f11` (partial) - Fix nocca TX command in ral_master.c
+
+### Candidates (not yet cherry-picked)
 
 **`multitech/feature/fine-timestamp`** — Fine timestamp for SX1302/SX1303:
 - `505bb59` - Add fine timestamp support for SX1302/SX1303 with GPS

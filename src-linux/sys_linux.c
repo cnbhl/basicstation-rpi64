@@ -73,6 +73,9 @@ static const char* const SLAVE_ENVS[] = {
 #endif // defined(CFG_ral_master_slave)
 
 static struct logfile logfile;
+#if defined(CFG_usegpsd)
+u1_t  gpsEnabled = 0;
+#endif
 static char* gpsDevice    = NULL;
 static tmr_t startupTmr;
 
@@ -728,8 +731,17 @@ static int parseStationConf () {
                 }
                 case J_gps: {
                     makeFilepath(uj_str(&D),"",&gpsDevice,0);
+#if defined(CFG_usegpsd)
+                    gpsEnabled = 1;
+#endif
                     break;
                 }
+#if defined(CFG_usegpsd)
+                case J_gps_enable: {
+                    gpsEnabled = uj_bool(&D);
+                    break;
+                }
+#endif
                 case J_pps: {
                     str_t mode = uj_str(&D);
                     if( strcmp(mode,"gps") == 0 ) {
@@ -818,6 +830,15 @@ static int parseStationConf () {
     if( dwellDisabled ) s2e_dwellDisabled = dwellDisabled & 2;
     return 1;
 }
+
+
+#if defined(CFG_usegpsd)
+// GPS capability is determined by setup script configuration.
+// The MultiTech-proprietary /var/run/config/device_info.json does not exist on RPi.
+static int deviceGPSSupport () {
+    return 1;
+}
+#endif
 
 
 static struct opts {
@@ -1023,11 +1044,21 @@ static void startupMaster2 (tmr_t* tmr) {
     rt_addFeature("prod");  // certain development/test/debug features not accepted
 #endif
     rt_addFeature("dutyconf");  // supports duty_cycle_enabled in router_config
+#if !defined(CFG_nogps)
+    rt_addFeature("gps-ctrl");  // LNS can control GPS enable/disable
+#endif
     sys_enableCmdFIFO(makeFilepath("~/cmd",".fifo",NULL,0));
+#if defined(CFG_usegpsd)
+    if( gpsEnabled && deviceGPSSupport()) {
+        rt_addFeature("gps");
+        sys_enableGPS();
+    }
+#else
     if( gpsDevice ) {
         rt_addFeature("gps");
         sys_enableGPS(gpsDevice);
     }
+#endif
     sys_iniTC();
     sys_startTC();
     sys_iniCUPS();

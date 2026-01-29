@@ -21,12 +21,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly SCRIPT_DIR
 readonly LIB_DIR="$SCRIPT_DIR/lib"
 readonly CUPS_DIR="$SCRIPT_DIR/examples/corecell/cups-ttn"
-readonly BUILD_DIR="$SCRIPT_DIR/build-corecell-std"
-readonly STATION_BINARY="$BUILD_DIR/bin/station"
+BUILD_DIR="$SCRIPT_DIR/build-corecell-std"
+STATION_BINARY="$BUILD_DIR/bin/station"
 readonly CHIP_ID_DIR="$SCRIPT_DIR/tools/chip_id"
 readonly CHIP_ID_SOURCE="$CHIP_ID_DIR/chip_id.c"
 readonly CHIP_ID_LOG_STUB="$CHIP_ID_DIR/log_stub.c"
-readonly CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
+CHIP_ID_TOOL="$BUILD_DIR/bin/chip_id"
 readonly RESET_LGW_SCRIPT="$CUPS_DIR/reset_lgw.sh"
 readonly BOARD_CONF="$CUPS_DIR/board.conf"
 readonly BOARD_CONF_TEMPLATE="$CUPS_DIR/board.conf.template"
@@ -40,6 +40,7 @@ GATEWAY_EUI=""
 CUPS_KEY=""
 LOG_FILE=""
 GPS_DEVICE=""
+USE_GPSD="serial"
 MODE="setup"
 SKIP_DEPS=false
 SKIP_GPS=false
@@ -63,6 +64,7 @@ CLI_CUPS_KEY=""
 CLI_CUPS_KEY_FILE=""
 CLI_LOG_FILE=""
 CLI_GPS=""
+CLI_GPS_MODE=""
 CLI_SERVICE=""  # "yes", "no", or ""
 CLI_SKIP_BUILD=false
 
@@ -113,6 +115,7 @@ print_usage() {
     echo "  --cups-key-file <path> Read CUPS key from file (alternative to --cups-key)"
     echo "  --log-file <path>      Station log file path"
     echo "  --gps <device|none>    GPS device path or 'none' to disable"
+    echo "  --gps-mode <mode>      GPS communication mode: serial (default) or gpsd"
     echo "  --service              Enable systemd service setup"
     echo "  --no-service           Disable systemd service setup"
     echo "  --skip-build           Skip build if binary exists"
@@ -232,6 +235,18 @@ parse_args() {
                     exit 1
                 fi
                 CLI_GPS="$2"
+                shift 2
+                ;;
+            --gps-mode)
+                if [[ -z "${2:-}" ]]; then
+                    print_error "Error: --gps-mode requires a value"
+                    exit 1
+                fi
+                if [[ "$2" != "serial" && "$2" != "gpsd" ]]; then
+                    print_error "Error: --gps-mode must be 'serial' or 'gpsd'"
+                    exit 1
+                fi
+                CLI_GPS_MODE="$2"
                 shift 2
                 ;;
             --service)

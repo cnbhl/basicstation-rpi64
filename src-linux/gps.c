@@ -26,16 +26,43 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(CFG_usegpsd)
+#include "gpsd_config.h"  /* must be before all includes */
+#include <sys/socket.h>
+#include "gpsd.h"
+#include "gpsdclient.h"
+
+#endif // CFG_usegpsd
+
 #if defined(CFG_nogps)
 
 #include "rt.h"
 
+
+#if defined(CFG_usegpsd)
+int sys_enableGPS () {
+#else
 int sys_enableGPS (str_t _device) {
+#endif
     LOG(MOD_GPS|ERROR, "GPS function not compiled.");
     return 0;
 }
+int sys_getLatLon (double* lat, double* lon) {
+    LOG(MOD_GPS|ERROR, "GPS function not compiled.");
+    return 0;
+}
+void sys_disableGPS () {
+    // No-op when GPS not compiled
+}
+int sys_gpsEnabled () {
+    return 0;  // GPS not available
+}
+int sys_setGPSEnabled (int enabled) {
+    return 0;  // No change possible
+}
 
 #else // ! defined(CFG_nogps)
+
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -76,13 +103,10 @@ static u1_t UBX_EN_NAVTIMEGPS[] = {
 
 typedef struct termios tio_t;
 
-static u1_t   isTTY;
+
 static u1_t   garbageCnt;
 static str_t  device;
-static int    ubx;
-static int    baud;
 static aio_t* aio;
-static tio_t  saved_tio;
 static int    gpsfill;
 static u1_t   gpsline[1024];
 static tmr_t  reopen_tmr;
@@ -97,6 +121,28 @@ static int      last_reported_fix;
 static int      nofix_backoff;
 static ustime_t time_fixchange;
 
+// GPS control flags
+// gps_lns_enabled: LNS can disable GPS via router_config (overrides station.conf)
+//                  -1 = no LNS override (use station.conf setting)
+//                   0 = disabled by LNS
+//                   1 = enabled by LNS
+static s1_t gps_lns_override = -1;  // no override by default
+static u1_t gps_was_running = 0;    // track if GPS was running before LNS disable
+
+
+
+#if !defined(CFG_usegpsd)
+
+static u1_t   isTTY;
+static int    ubx;
+static int    baud;
+static tio_t saved_tio;
+
+#else
+
+static struct gps_data_t gpsdata;
+
+#endif
 
 #if defined(CFG_ubx)
 static u2_t fletcher8 (u1_t* data, int len) {
@@ -412,28 +458,83 @@ static void nmea_gga (char* p) {
 static int gps_reopen ();
 
 static void reopen_timeout (tmr_t* tmr) {
-    if( tmr == NULL || !gps_reopen() )
+    if( tmr == NULL || !gps_reopen() ) {
+#if defined(CFG_usegpsd)
+        rt_setTimer(&reopen_tmr, rt_micros_ahead(GPS_REOPEN_TTY_INTV));
+#else
         rt_setTimer(&reopen_tmr, rt_micros_ahead(isTTY ? GPS_REOPEN_TTY_INTV : GPS_REOPEN_FIFO_INTV));
+#endif
+    }
 }
 
 
+#if defined(CFG_usegpsd)
+static void gps_pipe_read(aio_t* _aio) {
+#else
 static void gps_read(aio_t* _aio) {
+#endif
+
     assert(aio == _aio);
     int n, done = 0;
+
+#if defined(CFG_usegpsd)
+    fd_set fds;
+    struct timespec tv;
+
+    tv.tv_sec = 0;
+    tv.tv_nsec = 100000000;
+    FD_ZERO(&fds);
+    FD_SET(gpsdata.gps_fd, &fds);
+    time_t exit_timer = 0;
+#endif
+
     while(1) {
-        n = read(aio->fd, gpsline+gpsfill, sizeof(gpsline)-gpsfill);
-        if( n == 0 ) {
-            // EOF
+
+
+#if defined(CFG_usegpsd)
+        n = pselect(gpsdata.gps_fd+1, &fds, NULL, NULL, &tv, NULL);
+        if (n >= 0 && exit_timer && time(NULL) >= exit_timer) {
+            LOG(MOD_GPS|XDEBUG, "gpsd pselect timeout expired");
+             // EOF
             aio_close(aio);
             aio = NULL;
             reopen_timeout(NULL);
             return;
         }
+#else
+        n = read(aio->fd, gpsline+gpsfill, sizeof(gpsline)-gpsfill);
+        if( n == 0 ) {
+             // EOF
+            aio_close(aio);
+            aio = NULL;
+            reopen_timeout(NULL);
+            return;
+        }
+#endif
+
+
+#if defined(CFG_usegpsd)
+        if( n == -1 ) {
+            if( errno == EAGAIN )
+                return;
+            rt_fatal("gpsd select error '%s': %d", strerror(errno), errno);
+        }
+
+        n = (int)recv(gpsdata.gps_fd, gpsline+gpsfill, sizeof(gpsline)-gpsfill, 0);
+
+        if (n <= 0) {
+            // EOF
+            reopen_timeout(NULL);
+            return;
+        }
+#else
         if( n == -1 ) {
             if( errno == EAGAIN )
                 return;
             rt_fatal("Failed to read GPS data from '%s': %s", device, strerror(errno));
         }
+#endif
+
         gpsfill = n = gpsfill + n;
         for( int i=0; i<n; i++ ) {
             if( gpsline[i] == '\n' ) {
@@ -501,9 +602,15 @@ static void gps_read(aio_t* _aio) {
 }
 
 
-static void gps_close () {
+#if defined(CFG_usegpsd)
+static void gps_pipe_close () {
+#else
+static void gps_close() {
+#endif
     if( aio == NULL )
         return;
+
+#if !defined(CFG_usegpsd)
     if( isTTY ) {
         if( tcsetattr(aio->fd, TCSANOW, &saved_tio) == -1 ) {
             LOG(MOD_GPS|WARNING, "Failed to restore TTY settings for '%s': %s", device, strerror(errno));
@@ -511,9 +618,11 @@ static void gps_close () {
         }
         tcflush(aio->fd, TCIOFLUSH);
     }
+    isTTY = 0;
+#endif
+
     aio_close(aio);
     aio = NULL;
-    isTTY = 0;
 }
 
 
@@ -526,6 +635,9 @@ static int gps_reopen () {
         aio = NULL;
     }
 
+#if defined(CFG_usegpsd)
+    if (true) {
+#else
     if( stat(device, &st) != -1  && (st.st_mode & S_IFMT) == S_IFIFO ) {
         if( (fd = open(device, O_RDONLY | O_NONBLOCK)) == -1 ) {
             LOG(MOD_GPS|ERROR, "Failed to open FIFO '%s': %s", device, strerror(errno));
@@ -584,6 +696,9 @@ static int gps_reopen () {
         }
         tcflush(fd, TCIOFLUSH);
         isTTY = 1;
+
+#endif // ! CFG_usegpsd
+
         garbageCnt = 4;
 
 #if defined(CFG_ubx)
@@ -593,12 +708,35 @@ static int gps_reopen () {
                 LOG(MOD_GPS|ERROR, "Failed to write UBX enable to GPS: n=%d %s", n, strerror(errno));
         }
 #endif // defined(CFG_ubx)
+
     }
-    // use device as dummy context
+
+#if defined(CFG_usegpsd)
+    unsigned int flags = 0;
+    // flags |= WATCH_RAW;   /*  super-raw data (gps binary)  */
+    flags |= WATCH_NMEA; /* raw NMEA */
+    struct fixsource_t source;
+    gpsd_source_spec(NULL, &source);
+
+    if (gps_open(source.server, source.port, &gpsdata) != 0) {
+        LOG(MOD_GPS|ERROR, "Failed to open GPS");
+        return 0;
+    }
+
+    (void)gps_stream(&gpsdata, flags, source.device);
+
+
+    // use device as dummy context, fd comes from gpsdata
+    aio = aio_open(&device, gpsdata.gps_fd, gps_pipe_read, NULL);
+    atexit(gps_pipe_close);
+    gpsfill = 0;
+    gps_pipe_read(aio);
+#else
     aio = aio_open(&device, fd, gps_read, NULL);
     atexit(gps_close);
     gpsfill = 0;
     gps_read(aio);
+#endif
     return 1;
 }
 
@@ -615,16 +753,25 @@ int sys_getLatLon (double* lat, double* lon) {
 // This information is only indicative of having a fix (and how good) and is used to
 // report alarms back to the LNS.
 //
+
+#if !defined(CFG_usegpsd)
 int sys_enableGPS (str_t _device) {
     if( _device == NULL )
         return 1;  // no GPS device configured
     device = _device;
     baud = 9600;
     ubx = 1;
+#else
+int sys_enableGPS () {
+#endif
 
     rt_iniTimer(&reopen_tmr, reopen_timeout);
     if( !gps_reopen() ) {
+#if defined(CFG_usegpsd)
+        LOG(MOD_GPS|CRITICAL, "Failed to open gpsd connection");
+#else
         LOG(MOD_GPS|CRITICAL, "Initial open of GPS %s '%s' failed - GPS disabled!", isTTY ? "TTY":"FIFO", device);
+#endif
         return 0;
     }
     dbuf_t b = sys_readFile(lastpos_filename);
@@ -648,6 +795,89 @@ int sys_enableGPS (str_t _device) {
         free(b.buf);
     }
     time_fixchange = rt_getTime();
+    return 1;
+}
+
+
+// Disable GPS - called when LNS sends gps_enable: false
+void sys_disableGPS () {
+    if( aio == NULL ) {
+        LOG(MOD_GPS|DEBUG, "GPS already stopped");
+        return;
+    }
+    LOG(MOD_GPS|INFO, "Stopping GPS");
+    gps_was_running = 1;
+    rt_clrTimer(&reopen_tmr);
+#if defined(CFG_usegpsd)
+    gps_pipe_close();
+#else
+    gps_close();
+#endif
+}
+
+
+// Check if GPS is enabled
+// Returns 1 if GPS should be active (LNS hasn't disabled it)
+// Returns 0 if GPS has been disabled by LNS
+int sys_gpsEnabled () {
+    // If LNS has sent an override, use that
+    // Otherwise GPS is considered enabled (station.conf controls initial startup)
+    if( gps_lns_override >= 0 )
+        return gps_lns_override;
+    return 1;  // no LNS override, GPS enabled by default
+}
+
+
+// Check if GPS was configured in station.conf
+// With CFG_usegpsd: gpsEnabled flag set during config parsing
+// Without: device pointer set by sys_enableGPS(device)
+static int gps_was_configured () {
+#if defined(CFG_usegpsd)
+    extern u1_t gpsEnabled;
+    return gpsEnabled;
+#else
+    return device != NULL;
+#endif
+}
+
+
+// Set GPS enabled state from LNS router_config
+// This OVERRIDES the station.conf setting
+// Returns 1 if state changed, 0 if no change
+int sys_setGPSEnabled (int enabled) {
+    int new_state = enabled ? 1 : 0;
+    int old_effective = sys_gpsEnabled();
+
+    // Check if this is actually a change
+    if( gps_lns_override == new_state )
+        return 0;  // no change in LNS override
+
+    gps_lns_override = new_state;
+
+    // Only take action if effective state changed
+    if( old_effective == new_state )
+        return 0;  // effective state didn't change
+
+    if( !new_state ) {
+        // LNS is disabling GPS - override station.conf
+        LOG(MOD_GPS|INFO, "GPS disabled by LNS (overrides station.conf)");
+        // Track if GPS was configured so we can restart when re-enabled
+        if( gps_was_configured() )
+            gps_was_running = 1;
+        sys_disableGPS();
+    } else {
+        // LNS is re-enabling GPS
+        // Restart GPS if it was running or if station.conf had it enabled
+        if( gps_was_running || gps_was_configured() ) {
+            LOG(MOD_GPS|INFO, "GPS re-enabled by LNS");
+            gps_was_running = 0;
+            if( !gps_reopen() ) {
+                LOG(MOD_GPS|ERROR, "Failed to re-open GPS");
+            }
+        } else {
+            LOG(MOD_GPS|INFO, "GPS enabled by LNS (not configured in station.conf)");
+        }
+    }
     return 1;
 }
 

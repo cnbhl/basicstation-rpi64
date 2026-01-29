@@ -24,53 +24,10 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-TD=../..
-include ${TD}/setup.gmk
-PLT=platform-${platform}
-
-LGWLIB=${TD}/${BD}/lib/liblgw.a
-LGWINC=${TD}/${BD}/include/lgw
-
-LGWVERSION.default = 5.0.1
-LGWVERSION ?= $(or ${LGWVERSION.${platform}}, ${LGWVERSION.default})
-
-HFILES = $(wildcard ${PLT}/libloragw/inc/*.h)
-SRCS = $(wildcard ${PLT}/libloragw/src/*.c)
-ARTEFACTS = ${LGWLIB} ${LGWINC} $(patsubst %, ${LGWINC}/%, $(notdir ${HFILES}) config.h)
-
-LGW_EXTRA_CFLAGS = -DSTATIONLOG -isystem =/usr/include/gps # Enable station log integration
-
-all: platform build
-platform: ${PLT}
-build: ${ARTEFACTS}
-
-${LGWINC}:
-	@mkdir -p $@
-
-${LGWLIB}: ${PLT}/libloragw/libloragw.a
-	@mkdir -p ${@D}
-	@echo "  CP    ${<F} -> $@"
-	@cp $< $@
-
-${PLT}/libloragw/libloragw.a: ${SRCS} ${HFILES}
-	${MAKE} -C ${PLT}/libloragw libloragw.a CC="${CC}" AR="${AR}" LD="${LD}" TDfull="${TDfull}" EXTRA_CFLAGS="${LGW_EXTRA_CFLAGS}"
-
-${PLT}/libloragw/inc/config.h: ${PLT}/libloragw/library.cfg
-	${MAKE} -C ${PLT}/libloragw inc/config.h CC="${CC}" AR="${AR}" LD="${LD}" TDfull="${TDfull}"
-
-${LGWINC}/%.h: ${PLT}/libloragw/inc/%.h | ${LGWINC}
-	@echo "  CP    ${<F} -> $@"
-	@cp $< $@
-
-${PLT}: prep.sh
-	platform=${platform} variant=${variant} lgwversion=${LGWVERSION} ./prep.sh
-	$(MAKE) --no-print-directory build platform=${platform} variant=${variant}
+all:
+	./test.sh
 
 clean:
-	rm -rf ${ARTEFACTS}
-	if [ -d ${PLT} ]; then ${MAKE} -C ${PLT}/libloragw clean; fi
+	rm -f $$(cat .gitignore)
 
-super-clean: clean
-	rm -rf git-repo platform-*
-
-.PHONY: all build clean platform super-clean 
+.PHONY: all clean
