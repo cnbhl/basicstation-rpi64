@@ -207,11 +207,17 @@ TTN CUPS configuration directory:
   - `{{GATEWAY_EUI}}` - 16-char hex Gateway EUI
   - `{{INSTALL_DIR}}` - Script directory path
   - `{{LOG_FILE}}` - Station log file path
-  - `{{GPS_DEVICE}}` - GPS device path (line removed if GPS disabled)
-  - `{{PPS_MODE}}` - PPS timing mode: "gps" (with GPS) or "fuzzy" (without GPS)
+  - `{{GPS_DEVICE}}` - GPS device path (quoted string) or empty string `""`
+  - `{{PPS_SOURCE}}` - PPS timing mode: `"gps"` (with GPS) or `"fuzzy"` (network time sync)
 - `reset_lgw.sh` - GPIO reset script with Pi 5 support (single source of truth)
 - `start-station.sh` - Launch script (`-d` flag for debug variant)
 - `rinit.sh` - Radio initialization called by station (invokes `reset_lgw.sh`)
+
+**GPS/PPS Configuration Logic** (in `lib/setup.sh` `step_create_credentials()`):
+| GPS Status | `gps` value | `pps` value | Description |
+|------------|-------------|-------------|-------------|
+| Enabled | `"/dev/ttyXXX"` | `"gps"` | Uses GPS for location and PPS timing |
+| Disabled | `""` | `"fuzzy"` | No GPS, uses network time synchronization |
 
 ### `examples/corecell/cups-ttn/reset_lgw.sh`
 Single location for the GPIO reset script. Used by:
@@ -354,8 +360,63 @@ The [xoseperez/basicstation](https://github.com/xoseperez/basicstation) fork has
 - **NetID filter**: Filters data frames by network ID extracted from DevAddr (e.g., `0x000013` = TTN)
 Useful for multi-tenant gateways or shared infrastructure. Not needed for single-network setups.
 
-**MultiTech Fork Cherry-Pick Analysis**
-See [docs/MULTITECH_CHERRY_PICKS.md](docs/MULTITECH_CHERRY_PICKS.md) for a detailed analysis of commits from the [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/basicstation) fork worth cherry-picking. Covers region support (AS923-2/3/4, IN865), mbedtls 3.x, SF5/SF6, LBT, regulatory TX power fixes, and more. This file can be removed once all relevant cherry-picks have been completed.
+## mbedtls 3.x Compatibility
+
+The codebase supports both mbedtls 2.x (default) and mbedtls 3.x with TLS 1.3 support.
+
+### Changes for mbedtls 3.x
+
+| File | Changes |
+|------|---------|
+| `deps/mbedtls/makefile` | Copy PSA headers (`include/psa/*.h`) for mbedtls 3.x crypto API |
+| `src/tls.c` | PSA crypto initialization, version-conditional includes, TLS 1.3 NewSessionTicket handling |
+| `src/tls.h` | Add `tls_ensurePsaInit()` function, version-conditional net includes |
+| `src/cups.c` | ECDSA signature verification updated for mbedtls 3.x private struct members |
+
+### Key API Changes in mbedtls 3.x
+
+- `mbedtls/net.h` → `mbedtls/net_sockets.h`
+- `mbedtls/certs.h` removed
+- `ecp_keypair` struct members are now private (use accessor functions)
+- `mbedtls_pk_parse_key()` requires RNG function parameter
+- PSA crypto must be initialized with `psa_crypto_init()` before use
+- TLS 1.3 sends `NewSessionTicket` after handshake (not an error, retry read)
+
+### Switching to mbedtls 3.x
+
+Edit `deps/mbedtls/prep.sh` to change:
+```bash
+# From:
+git clone -b mbedtls-2.28.0 ... https://github.com/ARMmbed/mbedtls.git
+# To:
+git clone -b v3.6.0 --recurse-submodules ... https://github.com/Mbed-TLS/mbedtls.git
+```
+
+Then clean and rebuild:
+```bash
+rm -rf deps/mbedtls/git-repo deps/mbedtls/platform-corecell build-corecell-std
+make platform=corecell variant=std
+```
+
+## Cherry-Picked Fixes from MultiTech Fork
+
+Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/basicstation) (BSD-3-Clause license, same as upstream Semtech).
+
+### Applied Cherry-Picks
+
+| Fix | MultiTech Commit | File | Description |
+|-----|------------------|------|-------------|
+| ifconf memset | `64f634f` (partial) | `src/sx130xconf.c` | Zero-initialize `ifconf` struct before JSON parsing to prevent stale/garbage values in channel config fields not explicitly set by LNS |
+| mbedtls 3.x | `cb9d67b`, `e75b882`, `7a344b8`, `6944075` | `src/tls.c`, `src/cups.c` | Compatibility with mbedtls 3.x including PSA crypto and ECDSA API changes |
+
+### Potential Future Cherry-Picks
+
+See [docs/MULTITECH_CHERRY_PICKS.md](docs/MULTITECH_CHERRY_PICKS.md) for detailed analysis of additional MultiTech commits:
+- SF5/SF6 spreading factor support
+- SX1302 LBT error handling
+- Fine timestamp support
+- Timesync exit on stuck concentrator
+- AS923-2/3/4 region support
 
 ## Versioning Convention
 

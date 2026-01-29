@@ -6,22 +6,40 @@ Analysis of [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/
 
 ---
 
-## Already On Existing Branches (merge to master)
+## CRITICAL WARNING: Fine Timestamp rxtime Issue
+
+**DO NOT MERGE `feature/fine-timestamp` branch as-is!**
+
+The fine timestamp implementation on this branch embeds `fts` into `rxtime`, but MultiTech **reverted** this approach in commit `5c54f11`. See [lorabasics/basicstation#177](https://github.com/lorabasics/basicstation/issues/177).
+
+**Problem**: `rt_getUTC()` cannot be reliably synchronized to GPS time. Calling it later can advance by a full second, making the sub-second portion misaligned with the fts value.
+
+**Required fix before merging**: Revert the `rxtime` modification in `src/s2e.c` (commit `e65f32a`). Keep `fts` as a separate JSON field and let the LNS combine them server-side with proper GPS-synced time.
+
+---
+
+## Already Merged to Master
+
+| Feature | Origin | Status |
+|---------|--------|--------|
+| IN865 region support | MultiTech `b10bd10` | Merged |
+| mbedtls 3.x compatibility | MultiTech `cb9d67b` + `e75b882` + `7a344b8` + `6944075` | Merged |
+| ifconf memset initialization | MultiTech `64f634f` | Merged |
+
+## On Existing Branches (not yet merged)
 
 | Branch | Feature | Origin |
 |--------|---------|--------|
-| `feature/in865-region` | IN865 region support | MultiTech `b10bd10` |
-| `feature/mbedtls-3x` | mbedtls 3.x compatibility | MultiTech `cb9d67b` + `e75b882` + `7a344b8` + `6944075` |
 | `feature/duty-cycle-sliding-window` | EU868 duty cycle bands K, L, N (ETSI EN 300 220) | MultiTech `8a36b49` + `48f8700` |
 
 ---
 
 ## New Cherry-Picks - Low Effort
 
-### ~~1. ifconf memset initialization~~ DONE
+### ~~1. ifconf memset initialization~~ MERGED
 **Commit**: `64f634f` (partial - just the memset line, skip dac_gain=3 SX1301 part)
 **File**: `src/sx130xconf.c`
-**Status**: Applied on `feature/fine-timestamp` branch. Zero-initializes `ifconf` struct before JSON parsing to prevent stale/garbage values in fields not explicitly set by the config.
+**Status**: **Merged to master.** Zero-initializes `ifconf` struct before JSON parsing to prevent stale/garbage values in fields not explicitly set by the config.
 
 ### ~~2. SF5/SF6 spreading factor support~~ DONE
 **Commit**: `799ac21` (partial - just `parse_spread_factor()`)
