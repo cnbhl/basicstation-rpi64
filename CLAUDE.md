@@ -319,6 +319,44 @@ The [xoseperez/basicstation](https://github.com/xoseperez/basicstation) fork has
 - **NetID filter**: Filters data frames by network ID extracted from DevAddr (e.g., `0x000013` = TTN)
 Useful for multi-tenant gateways or shared infrastructure. Not needed for single-network setups.
 
+## mbedtls 3.x Compatibility
+
+The codebase supports both mbedtls 2.x (default) and mbedtls 3.x with TLS 1.3 support.
+
+### Changes for mbedtls 3.x
+
+| File | Changes |
+|------|---------|
+| `deps/mbedtls/makefile` | Copy PSA headers (`include/psa/*.h`) for mbedtls 3.x crypto API |
+| `src/tls.c` | PSA crypto initialization, version-conditional includes, TLS 1.3 NewSessionTicket handling |
+| `src/tls.h` | Add `tls_ensurePsaInit()` function, version-conditional net includes |
+| `src/cups.c` | ECDSA signature verification updated for mbedtls 3.x private struct members |
+
+### Key API Changes in mbedtls 3.x
+
+- `mbedtls/net.h` → `mbedtls/net_sockets.h`
+- `mbedtls/certs.h` removed
+- `ecp_keypair` struct members are now private (use accessor functions)
+- `mbedtls_pk_parse_key()` requires RNG function parameter
+- PSA crypto must be initialized with `psa_crypto_init()` before use
+- TLS 1.3 sends `NewSessionTicket` after handshake (not an error, retry read)
+
+### Switching to mbedtls 3.x
+
+Edit `deps/mbedtls/prep.sh` to change:
+```bash
+# From:
+git clone -b mbedtls-2.28.0 ... https://github.com/ARMmbed/mbedtls.git
+# To:
+git clone -b v3.6.0 --recurse-submodules ... https://github.com/Mbed-TLS/mbedtls.git
+```
+
+Then clean and rebuild:
+```bash
+rm -rf deps/mbedtls/git-repo deps/mbedtls/platform-corecell build-corecell-std
+make platform=corecell variant=std
+```
+
 ## Cherry-Picked Fixes from MultiTech Fork
 
 Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/basicstation) (BSD-3-Clause license, same as upstream Semtech).
@@ -328,6 +366,7 @@ Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://
 | Fix | MultiTech Commit | File | Description |
 |-----|------------------|------|-------------|
 | ifconf memset | `64f634f` (partial) | `src/sx130xconf.c` | Zero-initialize `ifconf` struct before JSON parsing to prevent stale/garbage values in channel config fields not explicitly set by LNS |
+| mbedtls 3.x | `cb9d67b`, `e75b882`, `7a344b8`, `6944075` | `src/tls.c`, `src/cups.c` | Compatibility with mbedtls 3.x including PSA crypto and ECDSA API changes |
 
 ### Potential Future Cherry-Picks
 

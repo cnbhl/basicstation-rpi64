@@ -351,8 +351,19 @@ int tls_write(mbedtls_net_context* netctx, tlsctx_p tlsctx, const u1_t* p, size_
 }
 
 int tls_read(mbedtls_net_context* netctx, tlsctx_p tlsctx, u1_t* p, size_t sz) {
-    if( tlsctx )
-        return mbedtls_ssl_read(tlsctx, p, sz);
+    if( tlsctx ) {
+        int ret;
+        do {
+            ret = mbedtls_ssl_read(tlsctx, p, sz);
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000
+            // TLS 1.3: NewSessionTicket is received after handshake, not an error
+            // Just retry the read to get actual application data
+        } while( ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET );
+#else
+        } while( 0 );
+#endif
+        return ret;
+    }
     return mbedtls_net_recv(netctx, p, sz);
 }
 

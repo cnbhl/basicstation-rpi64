@@ -3,6 +3,11 @@
 ## Unreleased
 
 * fix: Zero-initialize ifconf struct before JSON channel config parsing (cherry-pick from MultiTech `64f634f`)
+* feature: mbedtls 3.x compatibility with TLS 1.3 support (cherry-pick from MultiTech)
+  - PSA crypto initialization for mbedtls 3.x
+  - Updated ECDSA signature verification for private struct members
+  - TLS 1.3 NewSessionTicket handling (retry read on post-handshake messages)
+  - Version-conditional includes and API calls
 
 ## 2.0.6-cnbhl.1.0 - 2025-01-25
 
