@@ -14,7 +14,10 @@ The fine timestamp implementation originally embedded `fts` into `rxtime`, but M
 
 **Problem**: `rt_getUTC()` cannot be reliably synchronized to GPS time. Calling it later can advance by a full second, making the sub-second portion misaligned with the fts value.
 
-**Resolution**: The `rxtime` modification has been reverted. The `fts` field is now sent as a separate JSON field, allowing the LNS to combine them server-side with proper GPS-synced time. The branch is now safe to merge.
+**Resolution**:
+1. The `rxtime` modification has been reverted. The `fts` field is now sent as a separate JSON field.
+2. Fine timestamps are now **opt-in** via `"ftime": true` in station.conf (prevents crash loops on SX1302 hardware that doesn't support fine timestamps).
+3. The branch is ready to merge.
 
 ---
 
