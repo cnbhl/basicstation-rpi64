@@ -8,6 +8,13 @@
   - Updated ECDSA signature verification for private struct members
   - TLS 1.3 NewSessionTicket handling (retry read on post-handshake messages)
   - Version-conditional includes and API calls
+* feature: IN865 (India 865 MHz) region support with 30 dBm max EIRP
+* feature: Sliding window duty cycle enforcement (cherry-pick from MultiTech `feature/duty-cycle`)
+  - ETSI EN 300 220 compliant duty cycle tracking for EU868
+  - Per-band limits: K=0.1%, L=1%, M=1%, N=0.1%, P=10%, Q=1%
+  - Configurable via `router_config`: `duty_cycle_enabled`, `duty_cycle_mode`, `duty_cycle_window`, `duty_cycle_limits`
+  - Modes: `legacy`, `band`, `channel`, `power`
+  - Added regression tests for EU868, AS923, KR920 duty cycle scenarios
 
 ## 2.0.6-cnbhl.1.0 - 2025-01-25
 

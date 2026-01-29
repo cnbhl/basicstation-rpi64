@@ -35,6 +35,7 @@ cd regr-tests
 ./run-regression-tests        # All tests
 ./run-regression-tests -v     # Verbose
 ./run-regression-tests -n     # Exclude hardware tests
+./run-tests-dc                # Duty cycle tests only (test9a/9b/9c)
 ```
 
 ## Fork-Specific Development
@@ -230,6 +231,44 @@ Handles Raspberry Pi GPIO offset differences:
 
 Auto-detection via `/sys/kernel/debug/gpio`, `/sys/class/gpio/gpiochip*/base`, or `/proc/device-tree/model` fallback.
 
+### Duty Cycle Enforcement (cherry-picked from MultiTech)
+
+Sliding window duty cycle tracking for ETSI EN 300 220 compliance. Cherry-picked from
+[MultiTechSystems/basicstation](https://github.com/MultiTechSystems/basicstation) `feature/duty-cycle` branch.
+
+**Source files:**
+- `src/s2e.c` - Core duty cycle implementation:
+  - `dc_tx_record_t`, `dc_history_t` - Circular buffer for TX records per band/channel
+  - `DC_MODE_*` enums: `LEGACY`, `BAND`, `CHANNEL`, `POWER`
+  - `s2e_canTx_sliding()` - Sliding window TX check
+  - `dc_record_tx()`, `dc_expire_old()`, `dc_cumulative()` - History management
+  - EU868 independent band tracking (K/L/M/N/P/Q bands with per-band limits)
+- `src/s2e.h` - Duty cycle data structures and mode definitions
+- `src/kwcrc.h` / `src/kwlist.txt` - JSON keywords: `duty_cycle_enabled`, `duty_cycle_mode`, `duty_cycle_window`, `duty_cycle_limits`
+- `src-linux/sys_linux.c` - `dutyconf` feature flag advertisement
+
+**router_config options:**
+- `duty_cycle_enabled` (Boolean) - When false, disables station-side DC enforcement (LNS controls scheduling)
+- `duty_cycle_mode` (String) - `"legacy"`, `"band"`, `"channel"`, or `"power"`
+- `duty_cycle_window` (Integer) - Sliding window duration in seconds (60-86400)
+- `duty_cycle_limits` (Object/Integer) - Per-band limits object or per-channel permille value
+
+**EU868 band limits (ETSI EN 300 220):**
+- Band K (863-865 MHz): 0.1%
+- Band L (865-868 MHz): 1%
+- Band M (868.0-868.6 MHz): 1%
+- Band N (868.7-869.2 MHz): 0.1%
+- Band P (869.4-869.65 MHz): 10%
+- Band Q (869.7-870.0 MHz): 1%
+
+**Regression tests:**
+- `regr-tests/test9a-dc-eu868/` - EU868 band-based DC tests (DISABLED, BAND_10PCT/1PCT/01PCT, MULTIBAND, WINDOW)
+- `regr-tests/test9b-dc-as923/` - AS923 per-channel DC tests (DISABLED, SINGLE_CH, MULTI_CH, WINDOW)
+- `regr-tests/test9c-dc-kr920/` - KR920 per-channel DC tests (DISABLED, SINGLE_CH, MULTI_CH)
+- `regr-tests/run-tests-dc` - CI runner script for duty cycle test category
+
+**Design doc:** `docs/Duty-Cycle-Sliding-Window-Plan.md`
+
 ### `tools/chip_id/`
 Standalone EUI detection tool derived from Semtech sx1302_hal:
 - `chip_id.c` - Reads EUI from SX1302 via SPI
@@ -367,6 +406,8 @@ Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://
 |-----|------------------|------|-------------|
 | ifconf memset | `64f634f` (partial) | `src/sx130xconf.c` | Zero-initialize `ifconf` struct before JSON parsing to prevent stale/garbage values in channel config fields not explicitly set by LNS |
 | mbedtls 3.x | `cb9d67b`, `e75b882`, `7a344b8`, `6944075` | `src/tls.c`, `src/cups.c` | Compatibility with mbedtls 3.x including PSA crypto and ECDSA API changes |
+| Duty cycle sliding window | `2e15d53`, `fa0d896`, `27c337e`, `a8bf871`, `ad6d5fb` | `src/s2e.c`, `src/s2e.h`, `src/kwcrc.h` | ETSI-compliant sliding window duty cycle tracking with per-band limits for EU868 |
+| IN865 region | N/A (custom) | `src/s2e.c` | Add IN865 (India 865 MHz) region support with 30 dBm max EIRP |
 
 ### Potential Future Cherry-Picks
 
@@ -398,3 +439,60 @@ Examples: Tag `2.0.6-cnbhl.1.0` → Title "Release 2.0.6-cnbhl.1.0"
 - **All changes require a PR**: Create a feature/fix branch, then open a pull request
 - **Branch naming**: Use prefixes like `fix/`, `feature/`, `docs/` (e.g., `fix/skip-gps-option`)
 - **Before every commit**: Review CLAUDE.md and update it if the commit introduces new features, changes conventions, modifies the project structure, or adds/removes files that are documented here. Keep CLAUDE.md as the single source of truth for project context.
+
+## MultiTech Cherry-Pick Tracker
+
+Cherry-picks from [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/basicstation).
+Remote: `multitech` pointing to `https://github.com/MultiTechSystems/basicstation.git`.
+
+### Completed
+
+**`feature/duty-cycle` → `feature/duty-cycle-sliding-window`** (all 5 feature commits):
+- `2e15d53` - Add `duty_cycle_enabled` router_config option
+- `fa0d896` - Add region-specific duty cycle tests
+- `27c337e` - Implement sliding window duty cycle tracking
+- `a8bf871` - Add duty cycle tests to CI workflow
+- `ad6d5fb` - Fix EU868 independent band tracking per ETSI EN 300 220
+
+**`feature/in865-region`** (1 commit, custom — not from multitech):
+- `02c88ea` - Add IN865 region support
+
+**`feature/mbedtls-3x`** (4 commits, custom — not from multitech):
+- `67edf21` - Copy PSA headers for mbedtls 3.x compatibility
+- `5dfb7ae` - Add mbedtls 3.x compatibility with backward compatibility for 2.x
+- `a7df227` - Initialize PSA crypto for mbedtls 3.x TLS 1.3 support
+- `4cae440` - Fix mbedtls 3.x key parsing for DER format credentials
+
+### Candidates (not yet cherry-picked)
+
+**`multitech/feature/gps-recovery`** — GPS/PPS recovery for SX1302/SX1303:
+- `9438ff9` - Add GPS/PPS recovery for SX1302/SX1303
+
+**`multitech/feature/gpsd-support`** — GPSD daemon support + GPS control:
+- `57b2503` - Updated GPS handler to use gpsd instead of file stream
+- `d429908` - Add gpsd support with `CFG_usegpsd` compiler flag
+- `dd1035f` - Add GPS control feature for LNS to disable/enable GPS
+- `f5a5f8d` - Improve GPS control and timesync recovery
+
+**`multitech/feature/fine-timestamp`** — Fine timestamp for SX1302/SX1303:
+- `505bb59` - Add fine timestamp support for SX1302/SX1303 with GPS
+- `229abc5` - Add memset initialization for sx130xconf struct
+
+**`multitech/feature/channel-plans`** — Additional region support:
+- `926ff01` - Add channel plan support for additional regions
+- `1c60f53` - Add IL915 region support and CCA/LBT for SX1302/SX1303
+
+**`multitech/feature/updn-dr`** — SF5/SF6 asymmetric datarate (RP002-1.0.5):
+- `871d558` - Add SF5/SF6 and asymmetric datarate support for RP002-1.0.5
+
+**`multitech/feature/rejoin`** — Rejoin request handling:
+- `cf6eaf1` - Implement rejoin request handling with raw PDU format
+
+**`multitech/feature/lbtconf`** — LBT channel configuration:
+- `571f830` - Implement LBT channel configuration via router_config
+
+**`multitech/feature/pdu-only`** — Raw frame forwarding:
+- `93340bb` - Add pdu-only mode for raw frame forwarding
+
+**`multitech/feature/remove-v2-code`** — Cleanup:
+- `36debf0` - Remove SX1301AR (v2 gateway) code
