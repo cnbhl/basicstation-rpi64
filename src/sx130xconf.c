@@ -173,6 +173,10 @@ static int parse_bandwidth (ujdec_t* D) {
 static int parse_spread_factor (ujdec_t* D) {
     sL_t sf = uj_int(D);
     switch(sf) {
+#if defined(CFG_sx1302)
+    case  5: return DR_LORA_SF5;  break;
+    case  6: return DR_LORA_SF6;  break;
+#endif
     case  7: return DR_LORA_SF7;  break;
     case  8: return DR_LORA_SF8;  break;
     case  9: return DR_LORA_SF9;  break;
@@ -180,7 +184,7 @@ static int parse_spread_factor (ujdec_t* D) {
     case 11: return DR_LORA_SF11; break;
     case 12: return DR_LORA_SF12; break;
     default:
-        uj_error(D, "Illegal spread_factor value: %ld (must be 7,..,12)", sf);
+        uj_error(D, "Illegal spread_factor value: %ld (must be 5,..,12)", sf);
         return DR_UNDEFINED; // NOT REACHED
     }
 }
@@ -257,6 +261,25 @@ static void parse_sx130x_conf (ujdec_t* D, struct sx130xconf* sx130xconf) {
             sx130xconf->pps = uj_bool(D);
             break;
         }
+#if defined(CFG_sx1302)
+        case J_ftime: {
+            // Fine timestamps require explicit opt-in via "ftime": true in SX1302_conf.
+            // Only SX1303 (or newer SX1302 revisions) support fine timestamps.
+            // Also requires "pps": true for GPS time synchronization.
+            if (uj_bool(D)) {
+                sx130xconf->ftime.enable = true;
+                sx130xconf->ftime.mode = LGW_FTIME_MODE_ALL_SF;  // fine timestamps for SF5 -> SF12
+
+                if (lgw_ftime_setconf(&sx130xconf->ftime) != LGW_HAL_SUCCESS) {
+                    LOG(MOD_RAL|WARNING, "lgw_ftime_setconf() failed.");
+                    sx130xconf->ftime.enable = false;
+                } else {
+                    LOG(MOD_RAL|INFO, "Fine timestamp enabled.");
+                }
+            }
+            break;
+        }
+#endif
         case J_clksrc: {
             sx130xconf->boardconf.clksrc = uj_intRange(D, 0, LGW_RF_CHAIN_NB-1);
             break;
@@ -711,6 +734,14 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
 
     ustime_t t0 = rt_getTime();
     int err = lgw_start();
+#if defined(CFG_sx1302)
+    if( err != LGW_HAL_SUCCESS && sx130xconf->ftime.enable ) {
+        // Fine timestamps may not be supported on this hardware (e.g., SX1302 Model ID 0x00)
+        LOG(MOD_RAL|ERROR, "lgw_start failed - fine timestamps may not be supported by this hardware");
+        LOG(MOD_RAL|ERROR, "Fine timestamps require SX1303 or newer SX1302 revisions");
+        LOG(MOD_RAL|ERROR, "Remove \"ftime\": true from station.conf to disable fine timestamps");
+    }
+#endif
     if( err != LGW_HAL_SUCCESS ) {
         errmsg = "lgw_start";
         goto fail;

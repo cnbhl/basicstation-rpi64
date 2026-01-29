@@ -11,6 +11,7 @@ This is a fork of [lorabasics/basicstation](https://github.com/lorabasics/basics
 - Automated TTN CUPS setup via `setup-gateway.sh`
 - Automatic Gateway EUI detection from SX1302/SX1303 chips
 - Systemd service configuration
+- Fine timestamp support for SX1302/SX1303 with GPS PPS
 
 For upstream Basic Station documentation: https://doc.sm.tc/station
 
@@ -350,6 +351,63 @@ Standalone EUI detection tool derived from Semtech sx1302_hal:
 - `log_stub.c` - Logging stub for standalone build
 - Built against `build-corecell-std/lib/liblgw1302.a`
 
+### Fine Timestamp Support (SX1302/SX1303)
+Adds nanosecond-precision fine timestamps to uplink frames when GPS PPS is available. This is a core station C code modification (not shell/setup tooling).
+
+**Hardware requirement:** Fine timestamps require **SX1303** or newer SX1302 revisions. Older SX1302 chips (Model ID 0x00) do not support fine timestamps.
+
+**How to enable:**
+Add `"ftime": true` to the `SX1302_conf` section of `station.conf`:
+```json
+{
+    "SX1302_conf": {
+        "pps": true,
+        "ftime": true,
+        ...
+    }
+}
+```
+
+**How it works:**
+- Fine timestamping requires explicit opt-in via `"ftime": true` in `station.conf`
+- Also requires `"pps": true` for GPS time synchronization
+- The SX1302/SX1303 HAL provides fine timestamps for all spreading factors (SF5-SF12)
+- Fine timestamps are in nanoseconds; the `fts` field is `-1` when unavailable
+- The `fts` field is sent as a separate JSON field; the LNS combines it with GPS-synchronized time server-side for geolocation
+- When duplicate/mirror frames are detected from multiple modems, the fine timestamp is preserved from whichever copy has it
+
+**Why `fts` is separate from `rxtime`:** Per [lorabasics/basicstation#177](https://github.com/lorabasics/basicstation/issues/177), `rt_getUTC()` cannot be reliably synchronized to GPS time, and may advance by a full second between packet reception and JSON encoding. Embedding `fts` into `rxtime` would cause misalignment. The LNS has proper GPS-synced time and can combine them correctly.
+
+**Files modified:**
+- `src/kwlist.txt` - Added `ftime` keyword for config parsing
+- `src/sx130xconf.h` - Added `struct lgw_conf_ftime_s ftime` to `sx130xconf` (SX1302 builds)
+- `src/sx130xconf.c` - Parses `"ftime"` config option, enables fine timestamping via `lgw_ftime_setconf()`
+- `src-linux/ralsub.h` - Added `s4_t fts` field to `ral_rx_resp` struct
+- `src-linux/ral_slave.c` - Populates `fts` from HAL `ftime_received`/`ftime`; zero-initializes `sx130xconf` with `memset`
+- `src-linux/ral_master.c` - Propagates `fts` from slave response to `rxjob`
+- `src/ral_lgw.c` - Populates `fts` from HAL in single-process mode
+- `src/s2e.c` - Copies fine timestamp between mirror frames during dedup, includes `fts` as separate field in uplink JSON
+
+**Uplink JSON output:**
+The `fts` field (nanoseconds, `-1` if unavailable) is included as a separate field:
+```json
+{"fts": 123456789, "rxtime": 1706000000.123456, ...}
+```
+
+### Timesync: Exit on Stuck Concentrator
+Cherry-picked from MultiTech fork (`eee8f10`). If the SX130x trigger counter stops ticking (concentrator locked up), the station now exits after `5 * QUICK_RETRIES` consecutive excessive clock drift cycles, allowing systemd to restart the service and re-initialize the hardware. Without this, a stuck concentrator causes the station to run indefinitely doing nothing.
+
+**File modified:** `src/timesync.c` - Added `exit(EXIT_FAILURE)` with `CRITICAL` log after excessive drift threshold.
+
+### ifconf Zero-Initialization
+Cherry-picked from MultiTech fork (`64f634f`, partial). Adds `memset(ifconf, 0, sizeof(struct lgw_conf_rxif_s))` at the start of `parse_ifconf()` in `src/sx130xconf.c`. Prevents stale or uninitialized values in channel configuration fields not explicitly set by JSON from the LNS.
+
+### SF5/SF6 Spreading Factor Support
+Cherry-picked from MultiTech fork (`799ac21`, partial). Adds SF5 and SF6 cases to `parse_spread_factor()` in `src/sx130xconf.c` inside `#if defined(CFG_sx1302)`. The SX1303 (and some SX1302 revisions) support SF5/SF6, defined in LoRaWAN RP2 1.0.5. Without this, an LNS sending SF5/SF6 channel config crashes the station with "Illegal spread factor."
+
+### SX1302 LBT Error Handling Fix
+Cherry-picked from MultiTech fork (`20c64c9`, partial). Separates SX1302 and SX1301 `lgw_send()` error paths in `src/ral_lgw.c` and `src-linux/ral_slave.c`. SX1302 HAL returns `LGW_LBT_NOT_ALLOWED` while SX1301 returns `LGW_LBT_ISSUE`. Upstream shared a single error check which used the wrong constant for SX1302 builds (worked by accident since both are `1` via our HAL patch alias).
+
 ### `tests/` - Test Scripts
 Test scripts for validating setup functionality:
 - `test-setup.sh` - Unit tests for validation and utility functions (no hardware required)
@@ -490,7 +548,7 @@ Some fixes have been cherry-picked from [MultiTechSystems/basicstation](https://
 
 ### Potential Future Cherry-Picks
 
-See `feature/fine-timestamp` branch for analysis of additional MultiTech commits that may be useful:
+See [docs/MULTITECH_CHERRY_PICKS.md](docs/MULTITECH_CHERRY_PICKS.md) for detailed analysis of additional MultiTech commits:
 - SF5/SF6 spreading factor support
 - SX1302 LBT error handling
 - Fine timestamp support
