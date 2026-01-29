@@ -259,22 +259,27 @@ static void parse_sx130x_conf (ujdec_t* D, struct sx130xconf* sx130xconf) {
         }
         case J_pps: {
             sx130xconf->pps = uj_bool(D);
-
+            break;
+        }
 #if defined(CFG_sx1302)
-            // Enable fine timestamping if PPS is enabled in station.conf
-            if (sx130xconf->pps == true) {
+        case J_ftime: {
+            // Fine timestamps require explicit opt-in via "ftime": true in SX1302_conf.
+            // Only SX1303 (or newer SX1302 revisions) support fine timestamps.
+            // Also requires "pps": true for GPS time synchronization.
+            if (uj_bool(D)) {
                 sx130xconf->ftime.enable = true;
                 sx130xconf->ftime.mode = LGW_FTIME_MODE_ALL_SF;  // fine timestamps for SF5 -> SF12
 
                 if (lgw_ftime_setconf(&sx130xconf->ftime) != LGW_HAL_SUCCESS) {
-                    LOG(MOD_RAL|ERROR, "Set fine timestamp -> lgw_ftime_setconf() failed.");
+                    LOG(MOD_RAL|WARNING, "lgw_ftime_setconf() failed.");
+                    sx130xconf->ftime.enable = false;
+                } else {
+                    LOG(MOD_RAL|INFO, "Fine timestamp enabled.");
                 }
-                LOG(MOD_RAL|INFO, "Fine timestamp %s.", sx130xconf->pps == true ? "enabled" : "disabled");
             }
-#endif
-
             break;
         }
+#endif
         case J_clksrc: {
             sx130xconf->boardconf.clksrc = uj_intRange(D, 0, LGW_RF_CHAIN_NB-1);
             break;
@@ -729,6 +734,14 @@ int sx130xconf_start (struct sx130xconf* sx130xconf, u4_t cca_region) {
 
     ustime_t t0 = rt_getTime();
     int err = lgw_start();
+#if defined(CFG_sx1302)
+    if( err != LGW_HAL_SUCCESS && sx130xconf->ftime.enable ) {
+        // Fine timestamps may not be supported on this hardware (e.g., SX1302 Model ID 0x00)
+        LOG(MOD_RAL|ERROR, "lgw_start failed - fine timestamps may not be supported by this hardware");
+        LOG(MOD_RAL|ERROR, "Fine timestamps require SX1303 or newer SX1302 revisions");
+        LOG(MOD_RAL|ERROR, "Remove \"ftime\": true from station.conf to disable fine timestamps");
+    }
+#endif
     if( err != LGW_HAL_SUCCESS ) {
         errmsg = "lgw_start";
         goto fail;

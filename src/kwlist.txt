@@ -154,6 +154,7 @@ tx_gain_lut
 tx_notch_freq
 # ----------------------------------------
 # sx1302 conf
+ftime
 pwr_idx
 rssi_tcomp
 coeff_a

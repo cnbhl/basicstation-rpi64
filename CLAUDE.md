@@ -240,9 +240,24 @@ Standalone EUI detection tool derived from Semtech sx1302_hal:
 ### Fine Timestamp Support (SX1302/SX1303)
 Adds nanosecond-precision fine timestamps to uplink frames when GPS PPS is available. This is a core station C code modification (not shell/setup tooling).
 
+**Hardware requirement:** Fine timestamps require **SX1303** or newer SX1302 revisions. Older SX1302 chips (Model ID 0x00) do not support fine timestamps.
+
+**How to enable:**
+Add `"ftime": true` to the `SX1302_conf` section of `station.conf`:
+```json
+{
+    "SX1302_conf": {
+        "pps": true,
+        "ftime": true,
+        ...
+    }
+}
+```
+
 **How it works:**
-- Fine timestamping is automatically enabled when `"pps": true` in `station.conf` (i.e., GPS is connected)
-- The SX1302/SX1303 HAL provides fine timestamps (`ftime`) for received packets across all spreading factors (SF5-SF12)
+- Fine timestamping requires explicit opt-in via `"ftime": true` in `station.conf`
+- Also requires `"pps": true` for GPS time synchronization
+- The SX1302/SX1303 HAL provides fine timestamps for all spreading factors (SF5-SF12)
 - Fine timestamps are in nanoseconds; the `fts` field is `-1` when unavailable
 - The `fts` field is sent as a separate JSON field; the LNS combines it with GPS-synchronized time server-side for geolocation
 - When duplicate/mirror frames are detected from multiple modems, the fine timestamp is preserved from whichever copy has it
@@ -250,8 +265,9 @@ Adds nanosecond-precision fine timestamps to uplink frames when GPS PPS is avail
 **Why `fts` is separate from `rxtime`:** Per [lorabasics/basicstation#177](https://github.com/lorabasics/basicstation/issues/177), `rt_getUTC()` cannot be reliably synchronized to GPS time, and may advance by a full second between packet reception and JSON encoding. Embedding `fts` into `rxtime` would cause misalignment. The LNS has proper GPS-synced time and can combine them correctly.
 
 **Files modified:**
+- `src/kwlist.txt` - Added `ftime` keyword for config parsing
 - `src/sx130xconf.h` - Added `struct lgw_conf_ftime_s ftime` to `sx130xconf` (SX1302 builds)
-- `src/sx130xconf.c` - Enables fine timestamping (`LGW_FTIME_MODE_ALL_SF`) when PPS is enabled via `lgw_ftime_setconf()`
+- `src/sx130xconf.c` - Parses `"ftime"` config option, enables fine timestamping via `lgw_ftime_setconf()`
 - `src-linux/ralsub.h` - Added `s4_t fts` field to `ral_rx_resp` struct
 - `src-linux/ral_slave.c` - Populates `fts` from HAL `ftime_received`/`ftime`; zero-initializes `sx130xconf` with `memset`
 - `src-linux/ral_master.c` - Propagates `fts` from slave response to `rxjob`
