@@ -244,8 +244,10 @@ Adds nanosecond-precision fine timestamps to uplink frames when GPS PPS is avail
 - Fine timestamping is automatically enabled when `"pps": true` in `station.conf` (i.e., GPS is connected)
 - The SX1302/SX1303 HAL provides fine timestamps (`ftime`) for received packets across all spreading factors (SF5-SF12)
 - Fine timestamps are in nanoseconds; the `fts` field is `-1` when unavailable
-- When a fine timestamp is present, `rxtime` in the uplink JSON is encoded with nanosecond precision (`%.9f` via the `'F'` format specifier) instead of the standard microsecond precision (`'T'`)
+- The `fts` field is sent as a separate JSON field; the LNS combines it with GPS-synchronized time server-side for geolocation
 - When duplicate/mirror frames are detected from multiple modems, the fine timestamp is preserved from whichever copy has it
+
+**Why `fts` is separate from `rxtime`:** Per [lorabasics/basicstation#177](https://github.com/lorabasics/basicstation/issues/177), `rt_getUTC()` cannot be reliably synchronized to GPS time, and may advance by a full second between packet reception and JSON encoding. Embedding `fts` into `rxtime` would cause misalignment. The LNS has proper GPS-synced time and can combine them correctly.
 
 **Files modified:**
 - `src/sx130xconf.h` - Added `struct lgw_conf_ftime_s ftime` to `sx130xconf` (SX1302 builds)
@@ -254,13 +256,12 @@ Adds nanosecond-precision fine timestamps to uplink frames when GPS PPS is avail
 - `src-linux/ral_slave.c` - Populates `fts` from HAL `ftime_received`/`ftime`; zero-initializes `sx130xconf` with `memset`
 - `src-linux/ral_master.c` - Propagates `fts` from slave response to `rxjob`
 - `src/ral_lgw.c` - Populates `fts` from HAL in single-process mode
-- `src/s2e.c` - Copies fine timestamp between mirror frames during dedup, includes `fts` in uplink JSON, appends nanosecond fractional time to `rxtime`
-- `src/uj.c` / `src/uj.h` - Added `uj_encFTime()` for nanosecond-precision timestamp encoding and `'F'` format specifier in `encArg()`
+- `src/s2e.c` - Copies fine timestamp between mirror frames during dedup, includes `fts` as separate field in uplink JSON
 
 **Uplink JSON output:**
-The `fts` field (nanoseconds, `-1` if unavailable) is always included. When `fts > -1`, `rxtime` gains nanosecond fractional precision:
+The `fts` field (nanoseconds, `-1` if unavailable) is included as a separate field:
 ```json
-{"fts": 123456789, "rxtime": 1706000000.123456789, ...}
+{"fts": 123456789, "rxtime": 1706000000.123456, ...}
 ```
 
 ### Timesync: Exit on Stuck Concentrator

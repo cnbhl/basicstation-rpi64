@@ -201,8 +201,7 @@ void s2e_flushRxjobs (s2ctx_t* s2ctx) {
                   /**/ "fts",     'i', j->fts,
                   /**/ "rssi",    'i', -(s4_t)j->rssi,
                   /**/ "snr",     'g', j->snr/4.0,
-                  // Append fractional part of the fine timestamp (fts) to rxtime if available
-                  /**/ "rxtime",  j->fts > -1 ? 'F' : 'T', j->fts > -1 ? (sL_t)(rt_getUTC()/1e6) + (double)j->fts/1e9 : rt_getUTC()/1e6,
+                  /**/ "rxtime",  'T', rt_getUTC()/1e6,
                   "}",
                   NULL);
         uj_encClose(&sendbuf, '}');

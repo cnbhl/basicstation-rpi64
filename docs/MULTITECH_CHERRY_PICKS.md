@@ -6,15 +6,15 @@ Analysis of [MultiTechSystems/basicstation](https://github.com/MultiTechSystems/
 
 ---
 
-## CRITICAL WARNING: Fine Timestamp rxtime Issue
+## ~~CRITICAL WARNING: Fine Timestamp rxtime Issue~~ FIXED
 
-**DO NOT MERGE `feature/fine-timestamp` branch as-is!**
+~~**DO NOT MERGE `feature/fine-timestamp` branch as-is!**~~
 
-The fine timestamp implementation on this branch embeds `fts` into `rxtime`, but MultiTech **reverted** this approach in commit `5c54f11`. See [lorabasics/basicstation#177](https://github.com/lorabasics/basicstation/issues/177).
+The fine timestamp implementation originally embedded `fts` into `rxtime`, but MultiTech **reverted** this approach in commit `5c54f11`. See [lorabasics/basicstation#177](https://github.com/lorabasics/basicstation/issues/177).
 
 **Problem**: `rt_getUTC()` cannot be reliably synchronized to GPS time. Calling it later can advance by a full second, making the sub-second portion misaligned with the fts value.
 
-**Required fix before merging**: Revert the `rxtime` modification in `src/s2e.c` (commit `e65f32a`). Keep `fts` as a separate JSON field and let the LNS combine them server-side with proper GPS-synced time.
+**Resolution**: The `rxtime` modification has been reverted. The `fts` field is now sent as a separate JSON field, allowing the LNS to combine them server-side with proper GPS-synced time. The branch is now safe to merge.
 
 ---
 
