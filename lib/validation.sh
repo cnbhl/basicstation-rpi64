@@ -27,6 +27,26 @@ validate_gpio() {
     [[ "$pin" =~ ^[0-9]+$ ]] && [ "$pin" -ge 0 ] && [ "$pin" -le 27 ]
 }
 
+# Validate antenna gain (0-15 dBi, can be decimal)
+# Args: $1 = antenna gain value
+# Returns: 0 if valid, 1 otherwise
+validate_antenna_gain() {
+    local gain="$1"
+    # Must be a number (integer or decimal)
+    if ! [[ "$gain" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+        return 1
+    fi
+    # Convert to integer for range check (bash doesn't do float comparison)
+    # Use awk for reliable decimal to integer conversion
+    local int_gain
+    int_gain=$(awk "BEGIN {printf \"%.0f\", $gain}" 2>/dev/null)
+    if [[ -z "$int_gain" ]]; then
+        return 1
+    fi
+    # Range: 0-15 dBi (typical antenna gains)
+    [[ "$int_gain" -ge 0 && "$int_gain" -le 15 ]]
+}
+
 # Sanitize string for use in sed replacement
 # Escapes special characters: \ / & and newlines
 sanitize_for_sed() {

@@ -63,6 +63,7 @@ Main entry point that sources modular libraries from `lib/`. Supports both inter
 - `--cups-key-file <path>` - Read CUPS key from file (alternative to --cups-key)
 - `--log-file <path>` - Station log file path
 - `--gps <device|none>` - GPS device path or 'none' to disable
+- `--antenna-gain <dBi>` - Antenna gain in dBi (0-15, default: 0)
 - `--service` / `--no-service` - Enable/disable systemd service setup
 - `--skip-build` - Skip build if binary exists
 
@@ -577,7 +578,7 @@ Format: `2.0.6-cnbhl.X.Y` or `2.0.6-cnbhl.X.Ya`
 - **Tag**: No "v" prefix (e.g., `2.0.6-cnbhl.1.0`)
 - **Release title**: `Release 2.0.6-cnbhl.X.Y` (prefix with "Release ")
 
-**Current version**: `2.0.6-cnbhl.1.3`
+**Current version**: `2.0.6-cnbhl.1.4`
 
 **History**: Versions `2.0.6-cnbhl.1` through `2.0.6-cnbhl.5` used the old single-number scheme.
 Starting with `2.0.6-cnbhl.1.0`, we use the new X.Y format.

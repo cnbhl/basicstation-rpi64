@@ -12,7 +12,7 @@
             "rssi_offset": -215.4,
             "rssi_tcomp": {"coeff_a": 0, "coeff_b": 0, "coeff_c": 20.41, "coeff_d": 2162.56, "coeff_e": 0},
             "tx_enable": true,
-            "antenna_gain": 0,           /* antenna gain, in dBi */
+            "antenna_gain": {{ANTENNA_GAIN}},  /* antenna gain, in dBi */
             "tx_gain_lut":[
                 {"rf_power": 12, "pa_gain": 0, "pwr_idx": 15},
                 {"rf_power": 13, "pa_gain": 0, "pwr_idx": 16},

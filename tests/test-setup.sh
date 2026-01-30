@@ -185,6 +185,30 @@ test_validate_gpio_invalid() {
     $result
 }
 
+test_validate_antenna_gain_valid() {
+    local result=true
+
+    validate_antenna_gain "0" || result=false
+    validate_antenna_gain "3" || result=false
+    validate_antenna_gain "5.5" || result=false
+    validate_antenna_gain "15" || result=false
+    validate_antenna_gain "2.15" || result=false
+
+    $result
+}
+
+test_validate_antenna_gain_invalid() {
+    local result=true
+
+    validate_antenna_gain "16" && result=false
+    validate_antenna_gain "-1" && result=false
+    validate_antenna_gain "abc" && result=false
+    validate_antenna_gain "" && result=false
+    validate_antenna_gain "20" && result=false
+
+    $result
+}
+
 test_get_board_config() {
     local result=true
 
@@ -472,6 +496,8 @@ main() {
     run_test "validate_board_type - invalid inputs" test_validate_board_type_invalid
     run_test "validate_gpio - valid inputs" test_validate_gpio_valid
     run_test "validate_gpio - invalid inputs" test_validate_gpio_invalid
+    run_test "validate_antenna_gain - valid inputs" test_validate_antenna_gain_valid
+    run_test "validate_antenna_gain - invalid inputs" test_validate_antenna_gain_invalid
     run_test "get_board_config" test_get_board_config
 
     # Run sanitization tests
