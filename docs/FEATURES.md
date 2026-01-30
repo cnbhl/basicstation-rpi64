@@ -19,7 +19,7 @@ Changes in [cnbhl/basicstation-rpi64](https://github.com/cnbhl/basicstation-rpi6
 - **Fine timestamp support** - Nanosecond-precision timestamps for SX1303 (opt-in via `"ftime": true`)
 - **SF5/SF6 spreading factors** - Support for LoRaWAN RP2 1.0.5 datarates
 - **IN865 region** - India 865 MHz band support
-- **mbedtls 3.x compatibility** - TLS 1.3 support with PSA crypto
+- **mbedtls 3.6.0 default** - TLS 1.3 support with PSA crypto (2.x compatibility retained)
 
 ## Fixes
 
