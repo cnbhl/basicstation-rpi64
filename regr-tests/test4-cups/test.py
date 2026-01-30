@@ -134,6 +134,7 @@ class TestMuxs(tu.Muxs):
             # Reason: The CUPS connection establishment is blocking. During that time no
             # downlinks can be scheduled which may result in unreliable downlinks.
             # await self.testDone(2)
+            return  # Skip deletion for unexpected dntxed
         logger.debug('MUXS DNTXED: expected %r - ok' % (msg['seqno'],))
         del self.exp_seqno[0]
 
