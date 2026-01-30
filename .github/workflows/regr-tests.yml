@@ -1,6 +1,18 @@
 name: regr-tests
 on: [push]
 jobs:
+  # Shell script tests (setup-gateway.sh and libraries)
+  shell-tests:
+    runs-on: ubuntu-22.04
+    name: Shell Script Tests
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Run unit tests
+        run: ./tests/test-setup.sh
+      - name: Run integration tests
+        run: ./tests/test-non-interactive.sh
+
   # Standard variants (testsim + testms)
   run-regr-tests:
     runs-on: ubuntu-22.04
