@@ -262,11 +262,31 @@ Sliding window duty cycle tracking for ETSI EN 300 220 compliance. Cherry-picked
 - Band P (869.4-869.65 MHz): 10%
 - Band Q (869.7-870.0 MHz): 1%
 
+**ETSI-compliant `freq2band()` implementation:**
+Our implementation in `src/s2e.c` correctly maps all 6 EU868 bands per ETSI EN 300 220. The original upstream Semtech code had a simplified 3-band mapping that defaulted most frequencies to 0.1%:
+```c
+// Original Semtech (incorrect):
+// - 869.4-869.65 MHz → 10%
+// - 868.0-868.6 MHz or 869.7-870.0 MHz → 1%
+// - Everything else → 0.1% (default)
+
+// Our ETSI-compliant implementation:
+// - 863-865 MHz (Band K) → 0.1%
+// - 865-868 MHz (Band L) → 1%
+// - 868.0-868.6 MHz (Band M) → 1%
+// - 868.7-869.2 MHz (Band N) → 0.1%
+// - 869.4-869.65 MHz (Band P) → 10%
+// - 869.7-870.0 MHz (Band Q) → 1%
+```
+
 **Regression tests:**
 - `regr-tests/test9a-dc-eu868/` - EU868 band-based DC tests (DISABLED, BAND_10PCT/1PCT/01PCT, MULTIBAND, WINDOW)
 - `regr-tests/test9b-dc-as923/` - AS923 per-channel DC tests (DISABLED, SINGLE_CH, MULTI_CH, WINDOW)
 - `regr-tests/test9c-dc-kr920/` - KR920 per-channel DC tests (DISABLED, SINGLE_CH, MULTI_CH)
 - `regr-tests/run-tests-dc` - CI runner script for duty cycle test category
+
+**TLS/CUPS test frequency fix:**
+The tls-cups tests (`test3-updn-tls`, `test3a-updn-tls`, `test4-cups`, `test5-runcmd`) were updated to use 864.1 MHz (Band K, 0.1%) instead of 867.1 MHz (Band L, 1%) for duty cycle blocking tests. The original tests assumed 867.1 MHz had 0.1% duty cycle (per the simplified upstream `freq2band`), but our ETSI-compliant implementation correctly maps it to 1%.
 
 **Design doc:** `docs/Duty-Cycle-Sliding-Window-Plan.md`
 

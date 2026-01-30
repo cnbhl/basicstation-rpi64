@@ -28,6 +28,7 @@ Changes in [cnbhl/basicstation-rpi64](https://github.com/cnbhl/basicstation-rpi6
 - **SX1302 LBT error handling** - Correct error constants for SX1302 vs SX1301
 - **nocca TX command** - Use correct command when checking response with LBT disabled
 - **Fine timestamp rxtime** - Send `fts` as separate field per [#177](https://github.com/lorabasics/basicstation/issues/177)
+- **EU868 band mapping** - ETSI-compliant 6-band mapping (upstream used simplified 3-band default)
 
 ## Tests
 
