@@ -33,8 +33,8 @@ class TestSlave(su.Slave):
             freq = 869.525
             port = 1
         elif self.fcnt < 10:
-            # Send on a .1% band - only 1st reply, other blocked by DC
-            freq = 867.100
+            # Send on 0.1% band (Band K: 863-865 MHz) - only 1st reply, other blocked by DC
+            freq = 864.100
             port = 2
         else:
             freq = 869.525
