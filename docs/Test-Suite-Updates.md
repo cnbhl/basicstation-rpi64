@@ -38,15 +38,14 @@ make platform=linux variant=testms1302
 
 ### Version Support
 
-The build system now supports multiple mbedTLS versions via the `MBEDTLS_VERSION` environment variable:
+The build system uses **mbedTLS 3.6.0** by default (with TLS 1.3 support). The `MBEDTLS_VERSION` environment variable can override this:
 
 ```bash
-# Default (2.28.0)
+# Default (3.6.0)
 make platform=linux variant=testsim
 
-# Specific version
+# Legacy 2.x (not tested in CI)
 MBEDTLS_VERSION=2.28.8 make platform=linux variant=testsim
-MBEDTLS_VERSION=3.6.0 make platform=linux variant=testsim
 ```
 
 ### Changes for mbedTLS 3.x

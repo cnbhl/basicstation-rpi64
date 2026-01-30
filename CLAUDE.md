@@ -511,11 +511,11 @@ The [xoseperez/basicstation](https://github.com/xoseperez/basicstation) fork has
 - **NetID filter**: Filters data frames by network ID extracted from DevAddr (e.g., `0x000013` = TTN)
 Useful for multi-tenant gateways or shared infrastructure. Not needed for single-network setups.
 
-## mbedtls 3.x Compatibility
+## mbedtls Version
 
-The codebase supports both mbedtls 2.x (default) and mbedtls 3.x with TLS 1.3 support.
+The codebase uses **mbedtls 3.6.0** (default) with TLS 1.3 support.
 
-### Changes for mbedtls 3.x
+### mbedtls 3.x Features
 
 | File | Changes |
 |------|---------|
@@ -524,7 +524,7 @@ The codebase supports both mbedtls 2.x (default) and mbedtls 3.x with TLS 1.3 su
 | `src/tls.h` | Add `tls_ensurePsaInit()` function, version-conditional net includes |
 | `src/cups.c` | ECDSA signature verification updated for mbedtls 3.x private struct members |
 
-### Key API Changes in mbedtls 3.x
+### Key mbedtls 3.x API Notes
 
 - `mbedtls/net.h` → `mbedtls/net_sockets.h`
 - `mbedtls/certs.h` removed
@@ -533,20 +533,12 @@ The codebase supports both mbedtls 2.x (default) and mbedtls 3.x with TLS 1.3 su
 - PSA crypto must be initialized with `psa_crypto_init()` before use
 - TLS 1.3 sends `NewSessionTicket` after handshake (not an error, retry read)
 
-### Switching to mbedtls 3.x
+### Legacy mbedtls 2.x Support
 
-Edit `deps/mbedtls/prep.sh` to change:
+The source code retains backward compatibility with mbedtls 2.x via `#if MBEDTLS_VERSION_NUMBER` conditionals, but this is no longer tested in CI. To use mbedtls 2.x:
 ```bash
-# From:
-git clone -b mbedtls-2.28.0 ... https://github.com/ARMmbed/mbedtls.git
-# To:
-git clone -b v3.6.0 --recurse-submodules ... https://github.com/Mbed-TLS/mbedtls.git
-```
-
-Then clean and rebuild:
-```bash
-rm -rf deps/mbedtls/git-repo deps/mbedtls/platform-corecell build-corecell-std
-make platform=corecell variant=std
+rm -rf deps/mbedtls/git-repo deps/mbedtls/platform-*
+MBEDTLS_VERSION=2.28.8 make platform=corecell variant=std
 ```
 
 ## Cherry-Picked Fixes from MultiTech Fork

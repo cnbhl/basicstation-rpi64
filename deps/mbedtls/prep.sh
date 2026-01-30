@@ -30,8 +30,8 @@ set -e
 cd $(dirname $0)
 
 # Allow overriding mbedtls version via environment variable
-# Defaults to 2.28.0 for backward compatibility
-MBEDTLS_VERSION=${MBEDTLS_VERSION:-2.28.0}
+# Default to mbedtls 3.6.0 (current LTS with TLS 1.3 support)
+MBEDTLS_VERSION=${MBEDTLS_VERSION:-3.6.0}
 MBEDTLS_BRANCH="mbedtls-${MBEDTLS_VERSION}"
 
 # For mbedtls 3.x, the branch naming changed to just "v3.x.x"

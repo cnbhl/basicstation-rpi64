@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mbedtls-version: ['2.28.8', '3.6.0']
+        mbedtls-version: ['3.6.0']
         test-category: ['core', 'tls-cups', 'updn', 'pps']
     name: ${{ matrix.test-category }} (mbedtls ${{ matrix.mbedtls-version }})
     steps:
@@ -77,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mbedtls-version: ['2.28.8', '3.6.0']
+        mbedtls-version: ['3.6.0']
         test-category: ['core', 'tls-cups', 'updn', 'pps']
     name: ${{ matrix.test-category }}-1302 (mbedtls ${{ matrix.mbedtls-version }})
     steps:
