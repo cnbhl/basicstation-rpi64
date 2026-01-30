@@ -1,5 +1,7 @@
 # LoRa Basic Station - Raspberry Pi 5 + TTN CUPS Fork
 
+[![regr-tests](https://github.com/cnbhl/basicstation-rpi64/actions/workflows/regr-tests.yml/badge.svg?branch=master)](https://github.com/cnbhl/basicstation-rpi64/actions/workflows/regr-tests.yml?query=branch%3Amaster)
+
 Fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (v2.0.6) adding:
 - Raspberry Pi 5 GPIO compatibility
 - **Multi-board support** (Seeed WM1302, Dragino PG1302, Elecrow LR1302, Waveshare SX1302)
