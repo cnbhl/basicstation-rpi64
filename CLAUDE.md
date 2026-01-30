@@ -577,10 +577,12 @@ Format: `2.0.6-cnbhl.X.Y` or `2.0.6-cnbhl.X.Ya`
 - **Tag**: No "v" prefix (e.g., `2.0.6-cnbhl.1.0`)
 - **Release title**: `Release 2.0.6-cnbhl.X.Y` (prefix with "Release ")
 
+**Current version**: `2.0.6-cnbhl.1.3`
+
 **History**: Versions `2.0.6-cnbhl.1` through `2.0.6-cnbhl.5` used the old single-number scheme.
 Starting with `2.0.6-cnbhl.1.0`, we use the new X.Y format.
 
-Examples: Tag `2.0.6-cnbhl.1.0` → Title "Release 2.0.6-cnbhl.1.0"
+Examples: Tag `2.0.6-cnbhl.1.3` → Title "Release 2.0.6-cnbhl.1.3"
 
 ## Git Workflow
 
