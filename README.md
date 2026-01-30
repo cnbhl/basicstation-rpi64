@@ -7,6 +7,8 @@ Fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (v
 - Automatic Gateway EUI detection from SX1302/SX1303
 - Systemd service configuration
 
+See [docs/FEATURES.md](docs/FEATURES.md) for a complete list of features and fixes.
+
 For upstream documentation: [doc.sm.tc/station](https://doc.sm.tc/station)
 
 ## Quick Start

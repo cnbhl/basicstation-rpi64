@@ -1,5 +1,8 @@
 # Duty Cycle Sliding Window Implementation Plan
 
+> **Status: IMPLEMENTED** - This feature is complete and merged to master.
+> This document is retained as design reference.
+
 This document outlines the plan to change the duty cycle implementation from a "time-off-air" approach to a sliding window approach that more accurately reflects regulatory requirements across multiple regions.
 
 ## Executive Summary
