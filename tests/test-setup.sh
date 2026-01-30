@@ -76,6 +76,7 @@ setup_test_env() {
     # Source the library files
     source "$SCRIPT_DIR/lib/common.sh"
     source "$SCRIPT_DIR/lib/validation.sh"
+    source "$SCRIPT_DIR/lib/file_ops.sh"
 
     # Set required global variables
     export BOARD_CONF_TEMPLATE="$SCRIPT_DIR/examples/corecell/cups-ttn/board.conf.template"
@@ -295,6 +296,148 @@ test_command_exists() {
 }
 
 #######################################
+# File Operations Tests (Security)
+#######################################
+
+test_write_file_secure_creates_file() {
+    local result=true
+    local test_file="$TEST_TEMP/secure_test.txt"
+
+    write_file_secure "$test_file" "test content" || result=false
+    [[ -f "$test_file" ]] || result=false
+    [[ "$(cat "$test_file")" == "test content" ]] || result=false
+
+    $result
+}
+
+test_write_file_secure_permissions() {
+    local result=true
+    local test_file="$TEST_TEMP/perms_test.txt"
+
+    # Test default permissions (600)
+    write_file_secure "$test_file" "secret"
+    local perms
+    perms=$(stat -c '%a' "$test_file" 2>/dev/null || stat -f '%Lp' "$test_file")
+    [[ "$perms" == "600" ]] || result=false
+
+    # Test custom permissions (644)
+    write_file_secure "$test_file" "public" "644"
+    perms=$(stat -c '%a' "$test_file" 2>/dev/null || stat -f '%Lp' "$test_file")
+    [[ "$perms" == "644" ]] || result=false
+
+    $result
+}
+
+test_write_secret_file_permissions() {
+    local result=true
+    local test_file="$TEST_TEMP/secret_test.txt"
+
+    write_secret_file "$test_file" "my-secret-key"
+
+    # Should always be 600
+    local perms
+    perms=$(stat -c '%a' "$test_file" 2>/dev/null || stat -f '%Lp' "$test_file")
+    [[ "$perms" == "600" ]] || result=false
+
+    # Content should match
+    [[ "$(cat "$test_file")" == "my-secret-key" ]] || result=false
+
+    $result
+}
+
+test_write_file_secure_atomic() {
+    local result=true
+    local test_file="$TEST_TEMP/atomic_test.txt"
+    local test_dir="$TEST_TEMP"
+
+    # Write initial content
+    write_file_secure "$test_file" "original"
+
+    # Write new content - should be atomic (no partial writes visible)
+    write_file_secure "$test_file" "updated"
+
+    # No temp files should remain
+    local temp_files
+    temp_files=$(find "$test_dir" -name '.tmp.*' 2>/dev/null | wc -l)
+    [[ "$temp_files" -eq 0 ]] || result=false
+
+    $result
+}
+
+test_process_template_basic() {
+    local result=true
+    local template="$TEST_TEMP/template.txt"
+    local output="$TEST_TEMP/output.txt"
+
+    # Create a simple template
+    echo "Hello {{NAME}}, your ID is {{ID}}" > "$template"
+
+    process_template "$template" "$output" "NAME=World" "ID=12345"
+
+    local content
+    content=$(cat "$output")
+    [[ "$content" == "Hello World, your ID is 12345" ]] || result=false
+
+    $result
+}
+
+test_process_template_special_chars() {
+    local result=true
+    local template="$TEST_TEMP/template_special.txt"
+    local output="$TEST_TEMP/output_special.txt"
+
+    # Create template
+    echo "Path: {{PATH}}" > "$template"
+
+    # Test with forward slashes (common in paths)
+    process_template "$template" "$output" "PATH=/usr/local/bin"
+
+    local content
+    content=$(cat "$output")
+    [[ "$content" == "Path: /usr/local/bin" ]] || result=false
+
+    # Test with ampersand
+    echo "Query: {{QUERY}}" > "$template"
+    process_template "$template" "$output" "QUERY=foo&bar=baz"
+
+    content=$(cat "$output")
+    [[ "$content" == "Query: foo&bar=baz" ]] || result=false
+
+    $result
+}
+
+test_copy_file_with_permissions() {
+    local result=true
+    local src="$TEST_TEMP/src_file.txt"
+    local dst="$TEST_TEMP/dst_file.txt"
+
+    echo "source content" > "$src"
+
+    # Copy with specific permissions
+    copy_file "$src" "$dst" "640"
+
+    [[ -f "$dst" ]] || result=false
+    [[ "$(cat "$dst")" == "source content" ]] || result=false
+
+    local perms
+    perms=$(stat -c '%a' "$dst" 2>/dev/null || stat -f '%Lp' "$dst")
+    [[ "$perms" == "640" ]] || result=false
+
+    $result
+}
+
+test_copy_file_nonexistent_source() {
+    local result=true
+
+    # Should fail for nonexistent source
+    if copy_file "$TEST_TEMP/nonexistent" "$TEST_TEMP/dst" 2>/dev/null; then
+        result=false
+    fi
+
+    $result
+}
+
+#######################################
 # Main
 #######################################
 
@@ -342,6 +485,16 @@ main() {
     run_test "file_exists" test_file_exists
     run_test "dir_exists" test_dir_exists
     run_test "command_exists" test_command_exists
+
+    # Run file operations tests (security)
+    run_test "write_file_secure - creates file" test_write_file_secure_creates_file
+    run_test "write_file_secure - permissions" test_write_file_secure_permissions
+    run_test "write_secret_file - permissions" test_write_secret_file_permissions
+    run_test "write_file_secure - atomic" test_write_file_secure_atomic
+    run_test "process_template - basic" test_process_template_basic
+    run_test "process_template - special chars" test_process_template_special_chars
+    run_test "copy_file - with permissions" test_copy_file_with_permissions
+    run_test "copy_file - nonexistent source" test_copy_file_nonexistent_source
 
     # Teardown
     teardown_test_env
