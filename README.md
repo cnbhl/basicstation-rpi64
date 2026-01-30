@@ -58,6 +58,7 @@ For CI/CD pipelines and scripted deployments:
 | `--cups-key-file <path>` | Read CUPS key from file |
 | `--log-file <path>` | Station log file path |
 | `--gps <device\|none>` | GPS device path or 'none' |
+| `--antenna-gain <dBi>` | Antenna gain for TX power adjustment (0-15, default: 0) |
 | `--service / --no-service` | Enable/disable systemd service |
 | `--skip-build` | Skip build if binary exists |
 

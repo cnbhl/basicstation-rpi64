@@ -9,7 +9,7 @@
 #   SCRIPT_DIR, CUPS_DIR, BUILD_DIR, STATION_BINARY
 #   CHIP_ID_DIR, CHIP_ID_SOURCE, CHIP_ID_LOG_STUB, CHIP_ID_TOOL
 #   RESET_LGW_SCRIPT, BOARD_CONF, BOARD_CONF_TEMPLATE
-#   TTN_REGION, CUPS_URI, GATEWAY_EUI, CUPS_KEY, LOG_FILE, GPS_DEVICE
+#   TTN_REGION, CUPS_URI, GATEWAY_EUI, CUPS_KEY, LOG_FILE, GPS_DEVICE, ANTENNA_GAIN
 #   BOARD_TYPE, SX1302_RESET_BCM, SX1302_POWER_EN_BCM
 #   SKIP_DEPS
 #
@@ -805,8 +805,67 @@ step_detect_gps() {
     echo ""
 }
 
+step_configure_antenna_gain() {
+    # Use CLI value if provided
+    if [[ -n "$CLI_ANTENNA_GAIN" ]]; then
+        if ! validate_antenna_gain "$CLI_ANTENNA_GAIN"; then
+            print_error "Invalid antenna gain: $CLI_ANTENNA_GAIN (must be 0-15 dBi)"
+            exit 1
+        fi
+        ANTENNA_GAIN="$CLI_ANTENNA_GAIN"
+        log_info "Using antenna gain from CLI: $ANTENNA_GAIN dBi"
+        if [[ "$NON_INTERACTIVE" != true ]]; then
+            echo -e "Using antenna gain: ${GREEN}$ANTENNA_GAIN dBi${NC}"
+            echo ""
+        fi
+        return 0
+    fi
+
+    # Default for non-interactive mode if not specified
+    if [[ "$NON_INTERACTIVE" == true ]]; then
+        ANTENNA_GAIN="0"
+        log_info "Using default antenna gain: $ANTENNA_GAIN dBi"
+        return 0
+    fi
+
+    print_header "Step 9: Antenna Gain Configuration"
+    echo ""
+    echo "To comply with ETSI regulations, the station subtracts your antenna gain"
+    echo "from the TX power to ensure radiated power stays within legal limits."
+    echo ""
+    echo "Common antenna gains:"
+    echo "  - Stock antenna (small whip):  2-3 dBi"
+    echo "  - Fiberglass omni (outdoor):   5-6 dBi"
+    echo "  - High-gain omni:              8-9 dBi"
+    echo "  - Directional/panel:           10-14 dBi"
+    echo ""
+    echo "If unsure, check your antenna specifications or use 0 (no adjustment)."
+    echo ""
+
+    local gain_input
+    while true; do
+        read -rp "Enter antenna gain in dBi [0]: " gain_input
+        gain_input="${gain_input:-0}"
+
+        if validate_antenna_gain "$gain_input"; then
+            ANTENNA_GAIN="$gain_input"
+            break
+        fi
+        print_error "Invalid value. Please enter a number between 0 and 15."
+    done
+
+    echo ""
+    if [[ "$ANTENNA_GAIN" != "0" ]]; then
+        echo -e "Antenna gain: ${GREEN}$ANTENNA_GAIN dBi${NC}"
+        echo "TX power will be reduced by $ANTENNA_GAIN dB to maintain regulatory compliance."
+    else
+        echo -e "Antenna gain: ${GREEN}0 dBi${NC} (no adjustment)"
+    fi
+    echo ""
+}
+
 step_create_credentials() {
-    print_header "Step 9: Creating credential files..."
+    print_header "Step 10: Creating credential files..."
 
     # Write URI file (not sensitive)
     write_file_secure "$CUPS_DIR/cups.uri" "$CUPS_URI" "644"
@@ -816,7 +875,7 @@ step_create_credentials() {
     write_secret_file "$CUPS_DIR/cups.key" "Authorization: Bearer $CUPS_KEY"
     echo "  Created: cups.key (permissions: 600)"
 
-    print_header "Step 10: Generating station.conf..."
+    print_header "Step 11: Generating station.conf..."
 
     local template="$CUPS_DIR/station.conf.template"
     if file_exists "$template"; then
@@ -838,14 +897,15 @@ step_create_credentials() {
             "INSTALL_DIR=$SCRIPT_DIR" \
             "LOG_FILE=$LOG_FILE" \
             "GPS_DEVICE=$gps_json_value" \
-            "PPS_SOURCE=$pps_json_value"
+            "PPS_SOURCE=$pps_json_value" \
+            "ANTENNA_GAIN=$ANTENNA_GAIN"
         chmod 644 "$CUPS_DIR/station.conf"
         echo "  Created: station.conf"
     else
         print_warning "Warning: station.conf.template not found. Please configure station.conf manually."
     fi
 
-    print_header "Step 11: Setting file permissions..."
+    print_header "Step 12: Setting file permissions..."
     chmod 600 "$CUPS_DIR/cups.key" 2>/dev/null || true
     chmod 600 "$CUPS_DIR/tc.key" 2>/dev/null || true
     chmod 644 "$CUPS_DIR/cups.uri" 2>/dev/null || true
@@ -881,7 +941,7 @@ step_setup_service() {
     else
         if [[ "$NON_INTERACTIVE" != true ]]; then
             echo ""
-            print_header "Step 12: Gateway startup configuration"
+            print_header "Step 13: Gateway startup configuration"
             echo ""
             if ! confirm "Do you want to run the gateway as a systemd service?"; then
                 print_summary "manual"
@@ -1026,13 +1086,14 @@ print_summary() {
     echo ""
     print_banner "Setup Complete!"
     echo "Your gateway is configured with:"
-    echo "  Board:       $BOARD_TYPE"
-    echo "  Region:      $TTN_REGION"
-    echo "  Gateway EUI: $GATEWAY_EUI"
-    echo "  GPS mode:    $USE_GPSD"
-    echo "  GPS device:  ${GPS_DEVICE:-disabled}"
-    echo "  Config dir:  $CUPS_DIR"
-    echo "  Log file:    $LOG_FILE"
+    echo "  Board:        $BOARD_TYPE"
+    echo "  Region:       $TTN_REGION"
+    echo "  Gateway EUI:  $GATEWAY_EUI"
+    echo "  GPS mode:     $USE_GPSD"
+    echo "  GPS device:   ${GPS_DEVICE:-disabled}"
+    echo "  Antenna gain: ${ANTENNA_GAIN} dBi"
+    echo "  Config dir:   $CUPS_DIR"
+    echo "  Log file:     $LOG_FILE"
     echo ""
     echo "Setup log:     $(get_log_file)"
     echo ""
@@ -1062,6 +1123,7 @@ print_summary_quiet() {
     log_info "Gateway EUI: $GATEWAY_EUI"
     log_info "GPS mode: $USE_GPSD"
     log_info "GPS device: ${GPS_DEVICE:-disabled}"
+    log_info "Antenna gain: ${ANTENNA_GAIN} dBi"
     log_info "Config dir: $CUPS_DIR"
     log_info "Log file: $LOG_FILE"
     log_info "Mode: $mode"
@@ -1120,6 +1182,9 @@ run_setup() {
 
     step_detect_gps
     log_info "GPS device: ${GPS_DEVICE:-disabled}"
+
+    step_configure_antenna_gain
+    log_info "Antenna gain: ${ANTENNA_GAIN} dBi"
 
     step_create_credentials
     log_debug "Completed: create_credentials"

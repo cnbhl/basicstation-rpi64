@@ -41,6 +41,7 @@ CUPS_KEY=""
 LOG_FILE=""
 GPS_DEVICE=""
 USE_GPSD="serial"
+ANTENNA_GAIN="0"
 MODE="setup"
 SKIP_DEPS=false
 SKIP_GPS=false
@@ -65,6 +66,7 @@ CLI_CUPS_KEY_FILE=""
 CLI_LOG_FILE=""
 CLI_GPS=""
 CLI_GPS_MODE=""
+CLI_ANTENNA_GAIN=""
 CLI_SERVICE=""  # "yes", "no", or ""
 CLI_SKIP_BUILD=false
 
@@ -116,6 +118,7 @@ print_usage() {
     echo "  --log-file <path>      Station log file path"
     echo "  --gps <device|none>    GPS device path or 'none' to disable"
     echo "  --gps-mode <mode>      GPS communication mode: serial (default) or gpsd"
+    echo "  --antenna-gain <dBi>   Antenna gain in dBi (0-15, default: 0)"
     echo "  --service              Enable systemd service setup"
     echo "  --no-service           Disable systemd service setup"
     echo "  --skip-build           Skip build if binary exists"
@@ -247,6 +250,14 @@ parse_args() {
                     exit 1
                 fi
                 CLI_GPS_MODE="$2"
+                shift 2
+                ;;
+            --antenna-gain)
+                if [[ -z "${2:-}" ]]; then
+                    print_error "Error: --antenna-gain requires a value"
+                    exit 1
+                fi
+                CLI_ANTENNA_GAIN="$2"
                 shift 2
                 ;;
             --service)
