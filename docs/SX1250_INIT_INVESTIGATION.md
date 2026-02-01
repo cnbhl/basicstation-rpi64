@@ -29,6 +29,7 @@
 | SPI clock speed | ❌ Ruled out | Tested 2MHz, 500kHz, 100kHz, 50kHz — all return zeros (Phase 4) |
 | Reset sequence | ❌ Ruled out | Tested 1→0 and 0→1→0 (xoseperez style) — same failure (Phase 4) |
 | GPIO control method | ❌ Ruled out | Tested sysfs and libgpiod (gpioset) — same failure (Phase 4) |
+| Our software | ❌ Ruled out | xoseperez/basicstation-docker fails identically on Pi 4 (Phase 4) |
 
 ## Likely Root Cause
 
@@ -766,7 +767,31 @@ GPIO 23: op -- pd | lo  (OUTPUT, LOW)
 GPIO 27: op -- pd | hi  (OUTPUT, HIGH)
 ```
 
-**Note on xoseperez/basicstation-docker:** They list PG1302 as "supported" but with no automatic GPIO configuration. Users must manually set `RESET_GPIO=23` and `POWER_EN_GPIO=27`. It's unclear if PG1302 was actually tested on Pi 4/5 or just added based on chip type (SX1302).
+#### xoseperez/basicstation-docker Test (2026-02-01)
+
+Tested the [xoseperez/basicstation-docker](https://github.com/xoseperez/basicstation-docker) image on Pi 4 with PG1302:
+
+```bash
+sudo docker run --privileged --rm \
+  -e RESET_GPIO=23 \
+  -e POWER_EN_GPIO=27 \
+  xoseperez/basicstation find_concentrator
+```
+
+**Result:** `0 device(s) found!`
+
+Direct chip_id test inside container:
+```
+Concentrator enabled through gpiochip0:27 (using libgpiod)
+Concentrator reset through gpiochip0:23 (using libgpiod)
+ERROR: Failed to set SX1250_0 in STANDBY_RC mode
+ERROR: failed to start the gateway
+```
+
+**Conclusion:** The xoseperez docker image fails with the **exact same error** as our implementation. This proves:
+1. The issue is NOT our software
+2. PG1302 was likely added to xoseperez "supported" list based on chip type (SX1302) without actual Pi 4 testing
+3. This is a **hardware-level SPI incompatibility** between PG1302 and BCM2711
 
 #### Phase 4 Conclusions
 
@@ -776,7 +801,8 @@ GPIO 27: op -- pd | hi  (OUTPUT, HIGH)
 4. **Issue is NOT GPIO pin-related** — Alternative reset pin (BCM 25) produces same failure
 5. **Issue is NOT reset sequence-related** — Both 1→0 and 0→1→0 sequences fail
 6. **Issue is NOT GPIO library-related** — Both sysfs and libgpiod (gpioset) fail
-7. **The PG1302 module is not responding to SPI commands on BCM2711**
+7. **Issue is NOT our software** — xoseperez/basicstation-docker fails identically
+8. **The PG1302 module is not responding to SPI commands on BCM2711** — confirmed by independent implementation
 
 ---
 
@@ -789,7 +815,8 @@ The following have NOT been tested yet:
 3. **Signal integrity** — Oscilloscope analysis of MOSI/MISO/SCLK signals
 4. **Voltage levels** — Measure actual voltage levels at SPI pins
 5. **Power supply** — Check 3.3V rail stability on PG1302 with Pi 4 vs Pi Zero
-6. **xoseperez docker image** — Test their actual docker image on Pi 4 with PG1302
+
+**Note:** At this point, the remaining investigation areas are primarily hardware-level diagnostics that require specialized equipment (oscilloscope, multimeter). Software-level troubleshooting has been exhausted.
 
 ---
 
