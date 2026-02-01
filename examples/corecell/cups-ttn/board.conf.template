@@ -1,9 +1,8 @@
 # SX1302 Concentrator Board Definitions
-# Format: BOARD_TYPE:DESCRIPTION:SX1302_RESET_BCM:SX1302_POWER_EN_BCM:SX1261_RESET_BCM:MCU_NRESET_BCM
+# Format: BOARD_TYPE:DESCRIPTION:SX1302_RESET_BCM:SX1302_POWER_EN_BCM:SX1261_RESET_BCM
 #
 # To add a new board, add a line with the format above.
 # BCM pin numbers refer to the Broadcom GPIO numbering (not physical pin numbers).
-# MCU_NRESET_BCM is optional (leave empty if not needed).
 #
 # Sources:
 #   Semtech reference: https://github.com/Lora-net/sx1302_hal
