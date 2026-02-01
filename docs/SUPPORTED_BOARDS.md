@@ -7,10 +7,12 @@ This document lists the SX1302/SX1303 LoRaWAN concentrator HATs supported by thi
 | Board | Manufacturer | SX1302 Reset | Power EN | SX1261 Reset |
 |-------|--------------|--------------|----------|--------------|
 | WM1302 | Seeed Studio | BCM 17 | BCM 18 | BCM 5 |
-| PG1302 | Dragino | BCM 23 | BCM 27 | BCM 22 |
+| PG1302* | Dragino | BCM 23 | BCM 27 | BCM 22 |
 | LR1302 | Elecrow | BCM 17 | BCM 18 | BCM 5 |
 | SX1302_WS | Waveshare | BCM 23 | BCM 18 | BCM 22 |
 | SEMTECH | Semtech Reference | BCM 23 | BCM 18 | BCM 22 |
+
+*\*PG1302 requires **3.3V power jumper** (not 5V) on Pi 4 and Pi 5. See [PG1302 Power Jumper](#pg1302-power-jumper-pi-45) below.*
 
 ## Board Selection
 
@@ -49,7 +51,25 @@ The selected configuration is saved to `examples/corecell/cups-ttn/board.conf`.
   - SX1302 Reset: BCM 23 (physical pin 16)
   - Power Enable: BCM 27 (physical pin 13)
   - SX1261 Reset: BCM 22 (physical pin 15)
-- **Notes**: Does NOT have a temperature sensor - this fork includes patches to handle this gracefully
+- **Notes**:
+  - Does NOT have a temperature sensor - this fork includes patches to handle this gracefully
+  - **Pi 4/5 require 3.3V power jumper** - see below
+
+#### PG1302 Power Jumper (Pi 4/5)
+
+The PG1302 has a power jumper that selects between 3.3V and 5V power rails. **On Raspberry Pi 4 and Pi 5, you must set this jumper to 3.3V.**
+
+| Raspberry Pi | Power Jumper | Status |
+|--------------|--------------|--------|
+| Pi Zero, Pi 1, Pi 2, Pi 3 | 5V or 3.3V | Works with either |
+| **Pi 4, Pi 5** | **3.3V only** | 5V causes SPI failure |
+
+**Symptoms of wrong jumper setting:**
+- `chip version is 0x00 (v0.0)` instead of `0x10 (v1.0)`
+- `ERROR: Failed to set SX1250_0 in STANDBY_RC mode`
+- All SPI reads return zeros
+
+For the full investigation, see [docs/SX1250_INIT_INVESTIGATION.md](SX1250_INIT_INVESTIGATION.md)
 
 ### Elecrow LR1302
 
