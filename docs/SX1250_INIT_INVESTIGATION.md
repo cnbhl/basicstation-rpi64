@@ -880,17 +880,11 @@ Two tests to determine whether MCU_NRESET_BCM=4 was required:
 
 #### Why It Works
 
-The PG1302 has onboard level shifters powered from the jumper-selected voltage rail. When powered from 5V on Pi 4/5 (BCM2711/BCM2712):
-- The Pi's SPI controller starts faster than on Pi Zero
-- SPI transactions begin before the level shifters are ready
-- MISO returns all zeros because the level shifter isn't translating properly
+The exact cause is unknown, but the empirical result is clear:
+- **3.3V jumper**: SPI works on all Raspberry Pi models
+- **5V jumper**: SPI fails on Pi 4/5, works on Pi Zero/3
 
-When powered from 3.3V:
-- Level shifters are powered directly from the Pi's 3.3V rail
-- No voltage translation delay — signals pass through immediately
-- SPI communication works correctly
-
-On BCM2835 (Pi Zero), the SPI controller is slower, giving the 5V-powered level shifters time to stabilize before SPI transactions begin.
+The Pi Zero (BCM2835) tolerates the 5V jumper setting, while Pi 4/5 (BCM2711/BCM2712) do not.
 
 #### Test Results (3.3V jumper, no MCU_NRESET)
 
