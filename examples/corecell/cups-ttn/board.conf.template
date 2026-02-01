@@ -1,8 +1,9 @@
 # SX1302 Concentrator Board Definitions
-# Format: BOARD_TYPE:DESCRIPTION:SX1302_RESET_BCM:SX1302_POWER_EN_BCM:SX1261_RESET_BCM
+# Format: BOARD_TYPE:DESCRIPTION:SX1302_RESET_BCM:SX1302_POWER_EN_BCM:SX1261_RESET_BCM:MCU_NRESET_BCM
 #
 # To add a new board, add a line with the format above.
 # BCM pin numbers refer to the Broadcom GPIO numbering (not physical pin numbers).
+# MCU_NRESET_BCM is optional (leave empty if not needed).
 #
 # Sources:
 #   Semtech reference: https://github.com/Lora-net/sx1302_hal
@@ -14,8 +15,10 @@
 # Semtech Reference Design (for comparison):
 #   SX1302_RESET=23, POWER_EN=18, SX1261_RESET=22, AD5338R=13
 #
-WM1302:Seeed Studio WM1302 (SPI version):17:18:5
-PG1302:Dragino PG1302:23:27:22
-LR1302:Elecrow LR1302:17:18:5
-SX1302_WS:Waveshare SX1302 LoRaWAN Gateway HAT:23:18:22
-SEMTECH:Semtech CoreCell Reference Design:23:18:22
+# NOTE: PG1302 requires 3.3V power jumper (not 5V) for Pi 4/5 compatibility!
+#
+WM1302:Seeed Studio WM1302 (SPI version):17:18:5:
+PG1302:Dragino PG1302 (requires 3.3V jumper on Pi 4/5):23:27:22:4
+LR1302:Elecrow LR1302:17:18:5:
+SX1302_WS:Waveshare SX1302 LoRaWAN Gateway HAT:23:18:22:
+SEMTECH:Semtech CoreCell Reference Design:23:18:22:

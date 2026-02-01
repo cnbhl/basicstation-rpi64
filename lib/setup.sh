@@ -108,6 +108,10 @@ SX1302_RESET_BCM=$SX1302_RESET_BCM
 SX1302_POWER_EN_BCM=$SX1302_POWER_EN_BCM
 SX1261_RESET_BCM=$sx1261_reset_bcm
 EOF
+        # Add MCU_NRESET if defined (required for PG1302 on Pi 4/5)
+        if [[ -n "$MCU_NRESET_BCM" ]]; then
+            echo "MCU_NRESET_BCM=$MCU_NRESET_BCM" >> "$BOARD_CONF"
+        fi
 
         if [[ "$NON_INTERACTIVE" != true ]]; then
             print_success "Board configuration saved to $BOARD_CONF"
@@ -234,6 +238,10 @@ SX1302_RESET_BCM=$SX1302_RESET_BCM
 SX1302_POWER_EN_BCM=$SX1302_POWER_EN_BCM
 SX1261_RESET_BCM=$sx1261_reset_bcm
 EOF
+    # Add MCU_NRESET if defined (required for PG1302 on Pi 4/5)
+    if [[ -n "$MCU_NRESET_BCM" ]]; then
+        echo "MCU_NRESET_BCM=$MCU_NRESET_BCM" >> "$BOARD_CONF"
+    fi
 
     print_success "Board configuration saved to $BOARD_CONF"
     log_info "Board selected: $BOARD_TYPE (Reset=$SX1302_RESET_BCM, PowerEN=$SX1302_POWER_EN_BCM, SX1261=$sx1261_reset_bcm)"

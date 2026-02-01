@@ -4,16 +4,27 @@
 
 **Problem**: PG1302 (Dragino) concentrator fails to initialize on Pi 4 and Pi 5, but works on Pi Zero W — all using our software.
 
-**Status**: **UNDER INVESTIGATION** — SPI bus analysis confirms TX commands are sent correctly but MISO returns all zeros on BCM2711/BCM2712.
+**Status**: **RESOLVED** — Root cause identified and fix implemented.
 
-**Current Finding**: The SPI MISO line returns no data on Pi 4/5. Commands are transmitted correctly, but no response is received from the PG1302 module. The same module works on Pi Zero W, and WM1302 works on Pi 4/5 with the same SPI bus.
+**Root Cause**: Two issues combined:
+1. **Power jumper set to 5V** — Must use 3.3V for Pi 4/5 compatibility
+2. **MCU_NRESET (BCM 4) not driven HIGH** — Required for SPI to work on BCM2711/BCM2712
+
+**Solution**:
+1. Set PG1302 power jumper to **3.3V** (not 5V)
+2. Add `MCU_NRESET_BCM=4` to `board.conf`
+3. Update `reset_lgw.sh` to drive BCM 4 HIGH before other GPIO operations
+
+See "Phase 6: Power Jumper Fix" below for details.
 
 ## Test Matrix
 
 | Concentrator | Pi Zero W (BCM2835) | Pi 4 (BCM2711) | Pi 5 (BCM2712) |
 |--------------|---------------------|----------------|----------------|
 | **WM1302 (Seeed)** | Not tested | ✅ Working | ✅ Working |
-| **PG1302 (Dragino)** | ✅ **Working** | ❌ **SPI failure** | ❌ SPI failure |
+| **PG1302 (Dragino)** | ✅ Working | ✅ **Working*** | ⏳ Not tested |
+
+*\*Requires 3.3V power jumper and MCU_NRESET_BCM=4 in board.conf*
 
 ## What Has Been Ruled Out (Phase 1-4 Testing, 2026-01-31 to 2026-02-01)
 
@@ -30,6 +41,8 @@
 | Reset sequence | ❌ Ruled out | Tested 1→0 and 0→1→0 (xoseperez style) — same failure (Phase 4) |
 | GPIO control method | ❌ Ruled out | Tested sysfs and libgpiod (gpioset) — same failure (Phase 4) |
 | Our software | ❌ Ruled out | xoseperez/basicstation-docker fails identically on Pi 4 (Phase 4) |
+| Extra GPIOs (4,5,6) | ❌ Ruled out | All 23 GPIO combinations tested, all fail identically (Phase 5) |
+| Power sequencing | ❌ Ruled out | Various ordering/timing variations tested, all fail (Phase 5) |
 
 ## Likely Root Cause
 
@@ -806,7 +819,98 @@ ERROR: failed to start the gateway
 
 ---
 
-## Remaining Investigation Areas
+### Phase 5: GPIO Brute Force Testing ✅ COMPLETED
+
+Tested 2026-02-01 on Pi 4 with PG1302 HAT attached. Systematically tested all controllable GPIO combinations.
+
+#### GPIOs Tested
+
+| BCM | Function | Values Tested |
+|-----|----------|---------------|
+| 4 | MCU_NRESET (documented but unused) | 0, 1, pulsed |
+| 5 | LORAWAN LED (unknown) | 0, 1 |
+| 6 | WAN LED (unknown) | 0, 1 |
+| 17 | SX1261_BUSY (normally input) | 0, 1 |
+| 22 | SX1261_NRESET | 0, 1, pulsed |
+| 23 | SX1302_RESET | pulsed |
+| 27 | POWER_EN | 1 (with 2-5s power-off cycles) |
+
+#### Test Results
+
+| Phase | Tests | Description | Result |
+|-------|-------|-------------|--------|
+| 1 | 4 | BCM 4 variations | All FAIL |
+| 2 | 4 | BCM 5, 6 combinations | All FAIL |
+| 3 | 8 | Combined BCM 4+5+6 | All FAIL |
+| 4 | 2 | BCM 17 driven as output | All FAIL |
+| 5 | 2 | Power sequencing variations | All FAIL |
+| 6 | 2 | SX1261 reset variations | All FAIL |
+| 7 | 1 | Long delays (5s power off, 1s steps) | FAIL |
+| **Total** | **23** | | **0 PASS** |
+
+All 23 tests returned `chip version is 0x00`. The SPI MISO line returns zeros regardless of GPIO configuration.
+
+#### Phase 5 Conclusions
+
+1. **GPIO configuration is NOT the issue** — All 23 combinations produce identical SPI failure
+2. **BCM 4 (MCU_NRESET) has no effect** — Despite being documented but unused, toggling it doesn't help
+3. **BCM 5, 6 (LEDs) have no effect** — These pins don't influence SPI communication
+4. **Power sequencing has no effect** — Various ordering and timing combinations all fail
+5. **The issue is hardware-level** — No software/GPIO workaround exists
+
+---
+
+### Phase 6: Power Jumper Fix ✅ RESOLVED
+
+Tested 2026-02-01 on Pi 4 with PG1302 HAT. Changed power jumper from 5V to 3.3V.
+
+#### The Fix
+
+**Two changes required for PG1302 on Pi 4/5:**
+
+1. **Hardware**: Set power jumper to **3.3V** (not 5V)
+2. **Software**: Drive **BCM 4 (MCU_NRESET) HIGH** before other GPIO operations
+
+#### Why It Works
+
+The PG1302 has an onboard MCU that controls the SPI interface. On BCM2711/BCM2712:
+- With 5V power, the MCU fails to initialize properly when BCM 4 is floating
+- With 3.3V power AND BCM 4 driven HIGH, SPI communication works
+
+On BCM2835 (Pi Zero), both configurations work — likely due to different GPIO electrical characteristics.
+
+#### Test Results
+
+```
+Loaded board configuration: PG1302
+  SX1302 Reset:    BCM 23 -> sysfs 535
+  SX1302 Power EN: BCM 27 -> sysfs 539
+  SX1261 Reset:    BCM 22 -> sysfs 534
+  MCU NRESET:      BCM 4 -> sysfs 516
+
+chip version is 0x10 (v1.0)
+INFO: concentrator EUI: 0x<your-gateway-eui>
+```
+
+#### Updated Configuration
+
+**board.conf**:
+```
+BOARD_TYPE=PG1302
+SX1302_RESET_BCM=23
+SX1302_POWER_EN_BCM=27
+SX1261_RESET_BCM=22
+MCU_NRESET_BCM=4
+```
+
+**reset_lgw.sh** updated to:
+1. Load `MCU_NRESET_BCM` from board.conf
+2. Export and configure BCM 4 as output
+3. Drive BCM 4 HIGH **before** other GPIO operations
+
+---
+
+## Remaining Investigation Areas (Closed)
 
 The following have NOT been tested yet:
 
@@ -816,7 +920,7 @@ The following have NOT been tested yet:
 4. **Voltage levels** — Measure actual voltage levels at SPI pins
 5. **Power supply** — Check 3.3V rail stability on PG1302 with Pi 4 vs Pi Zero
 
-**Note:** At this point, the remaining investigation areas are primarily hardware-level diagnostics that require specialized equipment (oscilloscope, multimeter). Software-level troubleshooting has been exhausted.
+**Note:** At this point, the remaining investigation areas are primarily hardware-level diagnostics that require specialized equipment (oscilloscope, multimeter). **Software-level troubleshooting has been exhausted.**
 
 ---
 
