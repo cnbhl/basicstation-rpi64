@@ -109,7 +109,7 @@ SX1302_POWER_EN_BCM=$SX1302_POWER_EN_BCM
 SX1261_RESET_BCM=$sx1261_reset_bcm
 EOF
         # Add MCU_NRESET if defined (required for PG1302 on Pi 4/5)
-        if [[ -n "$MCU_NRESET_BCM" ]]; then
+        if [[ -n "${MCU_NRESET_BCM:-}" ]]; then
             echo "MCU_NRESET_BCM=$MCU_NRESET_BCM" >> "$BOARD_CONF"
         fi
 
@@ -137,9 +137,10 @@ EOF
     local -a board_reset_pins=()
     local -a board_power_pins=()
     local -a board_sx1261_pins=()
+    local -a board_mcu_pins=()
     local index=1
 
-    while IFS=: read -r btype bdesc breset bpower bsx1261; do
+    while IFS=: read -r btype bdesc breset bpower bsx1261 bmcu; do
         # Skip comments and empty lines
         [[ "$btype" =~ ^#.*$ || -z "$btype" ]] && continue
 
@@ -148,9 +149,14 @@ EOF
         board_reset_pins+=("$breset")
         board_power_pins+=("$bpower")
         board_sx1261_pins+=("${bsx1261:-5}")  # Default to 5 if not specified
+        board_mcu_pins+=("${bmcu:-}")  # MCU_NRESET, empty if not specified
 
         echo "  $index) $btype - $bdesc"
-        echo "     Reset: GPIO $breset, Power EN: GPIO $bpower, SX1261: GPIO ${bsx1261:-5}"
+        if [[ -n "${bmcu:-}" ]]; then
+            echo "     Reset: GPIO $breset, Power EN: GPIO $bpower, SX1261: GPIO ${bsx1261:-5}, MCU: GPIO $bmcu"
+        else
+            echo "     Reset: GPIO $breset, Power EN: GPIO $bpower, SX1261: GPIO ${bsx1261:-5}"
+        fi
         echo ""
         ((index++))
     done < "$BOARD_CONF_TEMPLATE"
@@ -175,6 +181,7 @@ EOF
     if [ "$board_choice" -eq "$manual_option" ]; then
         # Manual configuration
         BOARD_TYPE="CUSTOM"
+        MCU_NRESET_BCM=""  # No MCU reset for custom boards by default
         echo ""
         print_header "Manual GPIO Configuration"
         echo "Enter BCM GPIO pin numbers (0-27):"
@@ -211,6 +218,7 @@ EOF
         SX1302_RESET_BCM="${board_reset_pins[$idx]}"
         SX1302_POWER_EN_BCM="${board_power_pins[$idx]}"
         sx1261_reset_bcm="${board_sx1261_pins[$idx]}"
+        MCU_NRESET_BCM="${board_mcu_pins[$idx]}"
     fi
 
     echo ""
@@ -218,6 +226,9 @@ EOF
     echo -e "SX1302 Reset pin: ${GREEN}GPIO $SX1302_RESET_BCM (BCM)${NC}"
     echo -e "Power Enable pin: ${GREEN}GPIO $SX1302_POWER_EN_BCM (BCM)${NC}"
     echo -e "SX1261 Reset pin: ${GREEN}GPIO $sx1261_reset_bcm (BCM)${NC}"
+    if [[ -n "${MCU_NRESET_BCM:-}" ]]; then
+        echo -e "MCU NRESET pin: ${GREEN}GPIO $MCU_NRESET_BCM (BCM)${NC}"
+    fi
     echo ""
 
     if ! confirm "Is this correct?" "y"; then
@@ -239,7 +250,7 @@ SX1302_POWER_EN_BCM=$SX1302_POWER_EN_BCM
 SX1261_RESET_BCM=$sx1261_reset_bcm
 EOF
     # Add MCU_NRESET if defined (required for PG1302 on Pi 4/5)
-    if [[ -n "$MCU_NRESET_BCM" ]]; then
+    if [[ -n "${MCU_NRESET_BCM:-}" ]]; then
         echo "MCU_NRESET_BCM=$MCU_NRESET_BCM" >> "$BOARD_CONF"
     fi
 
