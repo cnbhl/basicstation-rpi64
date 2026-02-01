@@ -135,7 +135,7 @@ EOF
     local -a board_sx1261_pins=()
     local index=1
 
-    while IFS=: read -r btype bdesc breset bpower bsx1261 _; do
+    while IFS=: read -r btype bdesc breset bpower bsx1261; do
         # Skip comments and empty lines
         [[ "$btype" =~ ^#.*$ || -z "$btype" ]] && continue
 
