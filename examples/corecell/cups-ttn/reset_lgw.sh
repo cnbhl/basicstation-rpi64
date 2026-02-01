@@ -27,10 +27,6 @@ fi
 # SX1261 reset pin - only used by some boards
 SX1261_RESET_BCM=${SX1261_RESET_BCM:-5}
 
-# MCU reset pin - PG1302 requires BCM 4 to be HIGH for SPI to work on Pi 4/5
-# When set, this pin is driven HIGH before other resets to release the MCU
-MCU_NRESET_BCM=${MCU_NRESET_BCM:-}
-
 # AD5338R reset pin - leave empty to disable
 AD5338R_RESET_BCM=${AD5338R_RESET_BCM:-}
 
@@ -97,12 +93,6 @@ SX1302_RESET_PIN=$((GPIO_BASE + SX1302_RESET_BCM))
 SX1302_POWER_EN_PIN=$((GPIO_BASE + SX1302_POWER_EN_BCM))
 SX1261_RESET_PIN=$((GPIO_BASE + SX1261_RESET_BCM))
 
-if [ -n "$MCU_NRESET_BCM" ]; then
-    MCU_NRESET_PIN=$((GPIO_BASE + MCU_NRESET_BCM))
-else
-    MCU_NRESET_PIN=""
-fi
-
 if [ -n "$AD5338R_RESET_BCM" ]; then
     AD5338R_RESET_PIN=$((GPIO_BASE + AD5338R_RESET_BCM))
 else
@@ -114,7 +104,6 @@ echo "Detected GPIO base offset: $GPIO_BASE"
 echo "  SX1302 Reset:    BCM $SX1302_RESET_BCM -> sysfs $SX1302_RESET_PIN"
 echo "  SX1302 Power EN: BCM $SX1302_POWER_EN_BCM -> sysfs $SX1302_POWER_EN_PIN"
 echo "  SX1261 Reset:    BCM $SX1261_RESET_BCM -> sysfs $SX1261_RESET_PIN"
-[ -n "$MCU_NRESET_PIN" ] && echo "  MCU NRESET:      BCM $MCU_NRESET_BCM -> sysfs $MCU_NRESET_PIN"
 
 WAIT_GPIO() { sleep 0.1; }
 
@@ -155,13 +144,11 @@ init() {
   export_gpio "$SX1302_RESET_PIN"
   export_gpio "$SX1261_RESET_PIN"
   export_gpio "$SX1302_POWER_EN_PIN"
-  export_gpio "$MCU_NRESET_PIN"
   export_gpio "$AD5338R_RESET_PIN"
 
   set_dir "$SX1302_RESET_PIN" "out"
   set_dir "$SX1261_RESET_PIN" "out"
   set_dir "$SX1302_POWER_EN_PIN" "out"
-  set_dir "$MCU_NRESET_PIN" "out"
   set_dir "$AD5338R_RESET_PIN" "out"
 }
 
@@ -169,14 +156,7 @@ reset() {
   echo "CoreCell reset through GPIO$SX1302_RESET_PIN..."
   echo "SX1261 reset through GPIO$SX1261_RESET_PIN..."
   echo "CoreCell power enable through GPIO$SX1302_POWER_EN_PIN..."
-  [ -n "$MCU_NRESET_PIN" ] && echo "MCU NRESET through GPIO$MCU_NRESET_PIN..."
   [ -n "$AD5338R_RESET_PIN" ] && echo "CoreCell ADC reset through GPIO$AD5338R_RESET_PIN..."
-
-  # MCU must be released from reset FIRST for SPI to work on Pi 4/5
-  # This is required for PG1302 (Dragino) on BCM2711/BCM2712
-  if [ -n "$MCU_NRESET_PIN" ]; then
-    set_val "$MCU_NRESET_PIN" 1
-  fi
 
   set_val "$SX1302_POWER_EN_PIN" 1
 
@@ -198,7 +178,6 @@ term() {
   unexport_gpio "$SX1302_RESET_PIN"
   unexport_gpio "$SX1261_RESET_PIN"
   unexport_gpio "$SX1302_POWER_EN_PIN"
-  unexport_gpio "$MCU_NRESET_PIN"
   unexport_gpio "$AD5338R_RESET_PIN"
 }
 

@@ -100,14 +100,13 @@ get_board_config() {
         return 1
     fi
 
-    while IFS=: read -r btype bdesc breset bpower bsx1261 bmcu; do
+    while IFS=: read -r btype bdesc breset bpower bsx1261 _; do
         # Skip comments and empty lines
         [[ "$btype" =~ ^#.*$ || -z "$btype" ]] && continue
         if [[ "$btype" == "$board" ]]; then
             SX1302_RESET_BCM="$breset"
             SX1302_POWER_EN_BCM="$bpower"
             SX1261_RESET_BCM="${bsx1261:-5}"
-            MCU_NRESET_BCM="${bmcu:-}"
             return 0
         fi
     done < "$BOARD_CONF_TEMPLATE"
