@@ -100,7 +100,7 @@ get_board_config() {
         return 1
     fi
 
-    while IFS=: read -r btype bdesc breset bpower bsx1261 _; do
+    while IFS=: read -r btype bdesc breset bpower bsx1261; do
         # Skip comments and empty lines
         [[ "$btype" =~ ^#.*$ || -z "$btype" ]] && continue
         if [[ "$btype" == "$board" ]]; then
