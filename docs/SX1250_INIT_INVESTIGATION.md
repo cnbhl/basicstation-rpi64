@@ -27,6 +27,8 @@
 | Defective module | ❌ Ruled out | Works on Pi Zero |
 | Alternative reset GPIO | ❌ Ruled out | BCM 25 tested, same SPI failure (Phase 4) |
 | SPI clock speed | ❌ Ruled out | Tested 2MHz, 500kHz, 100kHz, 50kHz — all return zeros (Phase 4) |
+| Reset sequence | ❌ Ruled out | Tested 1→0 and 0→1→0 (xoseperez style) — same failure (Phase 4) |
+| GPIO control method | ❌ Ruled out | Tested sysfs and libgpiod (gpioset) — same failure (Phase 4) |
 
 ## Likely Root Cause
 
@@ -747,13 +749,34 @@ GPIO 11 (SCLK):  a0    pd | lo  (ALT0/SPI, LOW)
 
 SPI pins are correctly configured in ALT0 mode. The MISO line (GPIO 9) is stuck LOW even during transactions.
 
+#### Reset Sequence Tests (xoseperez/basicstation-docker comparison)
+
+Tested reset methods from [xoseperez/basicstation-docker](https://github.com/xoseperez/basicstation-docker):
+
+| Reset Method | Sequence | GPIO Library | Result |
+|--------------|----------|--------------|--------|
+| Our original | 1→0 | sysfs | RX: 00 00 00 00 00 |
+| xoseperez style | 0→1→0 | sysfs | RX: 00 00 00 00 00 |
+| xoseperez style | 0→1→0 | libgpiod (gpioset) | RX: 00 00 00 00 00 |
+
+GPIO states after all reset methods are correct:
+```
+GPIO 22: op -- pd | hi  (OUTPUT, HIGH)
+GPIO 23: op -- pd | lo  (OUTPUT, LOW)
+GPIO 27: op -- pd | hi  (OUTPUT, HIGH)
+```
+
+**Note on xoseperez/basicstation-docker:** They list PG1302 as "supported" but with no automatic GPIO configuration. Users must manually set `RESET_GPIO=23` and `POWER_EN_GPIO=27`. It's unclear if PG1302 was actually tested on Pi 4/5 or just added based on chip type (SX1302).
+
 #### Phase 4 Conclusions
 
 1. **SPI TX is working correctly** — Commands are transmitted with proper register addresses
 2. **SPI RX returns all zeros** — MISO line provides no data
 3. **Issue is NOT timing-related** — Slowing SPI from 2MHz to 50kHz has no effect
-4. **Issue is NOT GPIO-related** — Alternative reset pin (BCM 25) produces same failure
-5. **The PG1302 module is not responding to SPI commands on BCM2711**
+4. **Issue is NOT GPIO pin-related** — Alternative reset pin (BCM 25) produces same failure
+5. **Issue is NOT reset sequence-related** — Both 1→0 and 0→1→0 sequences fail
+6. **Issue is NOT GPIO library-related** — Both sysfs and libgpiod (gpioset) fail
+7. **The PG1302 module is not responding to SPI commands on BCM2711**
 
 ---
 
@@ -766,6 +789,7 @@ The following have NOT been tested yet:
 3. **Signal integrity** — Oscilloscope analysis of MOSI/MISO/SCLK signals
 4. **Voltage levels** — Measure actual voltage levels at SPI pins
 5. **Power supply** — Check 3.3V rail stability on PG1302 with Pi 4 vs Pi Zero
+6. **xoseperez docker image** — Test their actual docker image on Pi 4 with PG1302
 
 ---
 
