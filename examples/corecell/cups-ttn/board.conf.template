@@ -18,7 +18,7 @@
 # NOTE: PG1302 requires 3.3V power jumper (not 5V) for Pi 4/5 compatibility!
 #
 WM1302:Seeed Studio WM1302 (SPI version):17:18:5:
-PG1302:Dragino PG1302 (requires 3.3V jumper on Pi 4/5):23:27:22:4
+PG1302:Dragino PG1302 (requires 3.3V jumper on Pi 4/5):23:27:22:
 LR1302:Elecrow LR1302:17:18:5:
 SX1302_WS:Waveshare SX1302 LoRaWAN Gateway HAT:23:18:22:
 SEMTECH:Semtech CoreCell Reference Design:23:18:22:

@@ -6,14 +6,9 @@
 
 **Status**: **RESOLVED** — Root cause identified and fix implemented.
 
-**Root Cause**: Two issues combined:
-1. **Power jumper set to 5V** — Must use 3.3V for Pi 4/5 compatibility
-2. **MCU_NRESET (BCM 4) not driven HIGH** — Required for SPI to work on BCM2711/BCM2712
+**Root Cause**: Power jumper set to 5V — Must use **3.3V** for Pi 4/5 compatibility.
 
-**Solution**:
-1. Set PG1302 power jumper to **3.3V** (not 5V)
-2. Add `MCU_NRESET_BCM=4` to `board.conf`
-3. Update `reset_lgw.sh` to drive BCM 4 HIGH before other GPIO operations
+**Solution**: Set PG1302 power jumper to **3.3V** (not 5V). No software changes required.
 
 See "Phase 6: Power Jumper Fix" below for details.
 
@@ -24,7 +19,7 @@ See "Phase 6: Power Jumper Fix" below for details.
 | **WM1302 (Seeed)** | Not tested | ✅ Working | ✅ Working |
 | **PG1302 (Dragino)** | ✅ Working | ✅ **Working*** | ⏳ Not tested |
 
-*\*Requires 3.3V power jumper and MCU_NRESET_BCM=4 in board.conf*
+*\*Requires 3.3V power jumper (no software changes needed)*
 
 ## What Has Been Ruled Out (Phase 1-4 Testing, 2026-01-31 to 2026-02-01)
 
@@ -866,27 +861,44 @@ Tested 2026-02-01 on Pi 4 with PG1302 HAT. Changed power jumper from 5V to 3.3V.
 
 #### The Fix
 
-**Two changes required for PG1302 on Pi 4/5:**
+**Only one change required for PG1302 on Pi 4/5:**
 
-1. **Hardware**: Set power jumper to **3.3V** (not 5V)
-2. **Software**: Drive **BCM 4 (MCU_NRESET) HIGH** before other GPIO operations
+- **Hardware**: Set power jumper to **3.3V** (not 5V)
+
+No software changes are required. MCU_NRESET (BCM 4) does NOT need to be driven — isolation testing proved this conclusively.
+
+#### Isolation Tests
+
+Two tests to determine whether MCU_NRESET_BCM=4 was required:
+
+| Test | Power Jumper | MCU_NRESET | Result | chip version |
+|------|--------------|------------|--------|--------------|
+| 1 | **3.3V** | NOT driven | ✅ **WORKS** | 0x10 |
+| 2 | 5V | Driven HIGH | ❌ FAILS | 0x00 |
+
+**Conclusion**: The 3.3V jumper is the **ONLY** fix required. Driving MCU_NRESET has no effect — it was a red herring during initial debugging.
 
 #### Why It Works
 
-The PG1302 has an onboard MCU that controls the SPI interface. On BCM2711/BCM2712:
-- With 5V power, the MCU fails to initialize properly when BCM 4 is floating
-- With 3.3V power AND BCM 4 driven HIGH, SPI communication works
+The PG1302 has onboard level shifters powered from the jumper-selected voltage rail. When powered from 5V on Pi 4/5 (BCM2711/BCM2712):
+- The Pi's SPI controller starts faster than on Pi Zero
+- SPI transactions begin before the level shifters are ready
+- MISO returns all zeros because the level shifter isn't translating properly
 
-On BCM2835 (Pi Zero), both configurations work — likely due to different GPIO electrical characteristics.
+When powered from 3.3V:
+- Level shifters are powered directly from the Pi's 3.3V rail
+- No voltage translation delay — signals pass through immediately
+- SPI communication works correctly
 
-#### Test Results
+On BCM2835 (Pi Zero), the SPI controller is slower, giving the 5V-powered level shifters time to stabilize before SPI transactions begin.
+
+#### Test Results (3.3V jumper, no MCU_NRESET)
 
 ```
 Loaded board configuration: PG1302
   SX1302 Reset:    BCM 23 -> sysfs 535
   SX1302 Power EN: BCM 27 -> sysfs 539
   SX1261 Reset:    BCM 22 -> sysfs 534
-  MCU NRESET:      BCM 4 -> sysfs 516
 
 chip version is 0x10 (v1.0)
 INFO: concentrator EUI: 0x<your-gateway-eui>
@@ -894,19 +906,13 @@ INFO: concentrator EUI: 0x<your-gateway-eui>
 
 #### Updated Configuration
 
-**board.conf**:
+**board.conf** (standard PG1302, no MCU_NRESET needed):
 ```
 BOARD_TYPE=PG1302
 SX1302_RESET_BCM=23
 SX1302_POWER_EN_BCM=27
 SX1261_RESET_BCM=22
-MCU_NRESET_BCM=4
 ```
-
-**reset_lgw.sh** updated to:
-1. Load `MCU_NRESET_BCM` from board.conf
-2. Export and configure BCM 4 as output
-3. Drive BCM 4 HIGH **before** other GPIO operations
 
 ---
 
