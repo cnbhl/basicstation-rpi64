@@ -4,9 +4,9 @@
 
 **Problem**: PG1302 (Dragino) concentrator fails to initialize on Pi 4 and Pi 5, but works on Pi Zero W — all using our software.
 
-**Status**: **HARDWARE INCOMPATIBILITY CONFIRMED** — The PG1302 module's SPI interface does not work with BCM2711/BCM2712 (Pi 4/5), but works with BCM2835 (Pi Zero).
+**Status**: **UNDER INVESTIGATION** — SPI bus analysis confirms TX commands are sent correctly but MISO returns all zeros on BCM2711/BCM2712.
 
-**Conclusion**: This is a **hardware-level SPI incompatibility** between the PG1302 module and the Pi 4/5's BCM2711/BCM2712 SoC. All software and GPIO configurations have been ruled out through systematic testing. The WM1302 module works on Pi 4/5 with the same SPI bus, suggesting the issue is specific to the PG1302's SPI interface design.
+**Current Finding**: The SPI MISO line returns no data on Pi 4/5. Commands are transmitted correctly, but no response is received from the PG1302 module. The same module works on Pi Zero W, and WM1302 works on Pi 4/5 with the same SPI bus.
 
 ## Test Matrix
 
@@ -15,7 +15,7 @@
 | **WM1302 (Seeed)** | Not tested | ✅ Working | ✅ Working |
 | **PG1302 (Dragino)** | ✅ **Working** | ❌ **SPI failure** | ❌ SPI failure |
 
-## What Has Been Ruled Out (Phase 1-3 Testing, 2026-01-31)
+## What Has Been Ruled Out (Phase 1-4 Testing, 2026-01-31 to 2026-02-01)
 
 | Hypothesis | Status | Evidence |
 |------------|--------|----------|
@@ -25,6 +25,8 @@
 | GPIO states with HAT | ❌ Ruled out | **IDENTICAL** on both platforms (22=HIGH, 23=LOW, 27=HIGH) |
 | Software/drivers | ❌ Ruled out | Same spi_bcm2835 driver, SPI opens successfully |
 | Defective module | ❌ Ruled out | Works on Pi Zero |
+| Alternative reset GPIO | ❌ Ruled out | BCM 25 tested, same SPI failure (Phase 4) |
+| SPI clock speed | ❌ Ruled out | Tested 2MHz, 500kHz, 100kHz, 50kHz — all return zeros (Phase 4) |
 
 ## Likely Root Cause
 
@@ -179,14 +181,15 @@ Our `reset_lgw.sh` correctly detects and applies the offset on both platforms.
 
 WM1302 uses GPIO 5 (default pull-UP) for SX1261_NRESET, while PG1302 uses GPIO 22 (default pull-DOWN). This is the only GPIO pull difference between the two boards, but it doesn't explain why PG1302 works on Pi Zero but not Pi 4.
 
-### H5: Unknown Platform-Specific Difference — ⏳ UNDER INVESTIGATION
+### H5: SPI Bus Hardware Difference — ⏳ UNDER INVESTIGATION
 
-Something other than GPIO pulls differs between Pi Zero and Pi 4 that affects PG1302 but not WM1302. Candidates:
-- SPI timing/clock speed differences
-- GPIO drive strength differences
-- Power supply characteristics
-- Device tree configuration differences
-- Other hardware differences (voltage levels, etc.)
+**Phase 4 confirmed:** SPI TX works (commands sent correctly), but MISO returns all zeros. This points to a hardware-level issue between BCM2711 SPI controller and PG1302 module.
+
+Remaining candidates to investigate:
+- SPI signal integrity (voltage levels, rise/fall times)
+- Power supply characteristics (3.3V rail stability)
+- Device tree SPI configuration differences
+- SPI mode settings (CPOL/CPHA)
 
 ## PG1302 vs WM1302 GPIO Comparison
 
@@ -521,9 +524,9 @@ Extracted from `draginofwd-32bit.deb`:
 5. **GPIO state appears correct on Pi 4** — GPIOs set to OUTPUT with proper values, but SPI still fails
 6. **Dragino's reset_lgw.sh incompatible with kernel 6.x** — uses raw GPIO numbers without base offset
 
-## Root Cause Analysis — HARDWARE SPI INCOMPATIBILITY
+## Root Cause Analysis — ONGOING
 
-### Definitive Findings (Phase 1-3 Testing, 2026-01-31)
+### Confirmed Findings (Phase 1-4 Testing, 2026-01-31 to 2026-02-01)
 
 **The issue is NOT GPIO-related.** Systematic testing proves:
 
@@ -536,16 +539,18 @@ Extracted from `draginofwd-32bit.deb`:
 
 3. **SPI device opens successfully** on both platforms (/dev/spidev0.0)
 
-4. **SPI reads return all zeros on Pi 4** — The driver reports "SPI read success" but data is 0x00
+4. **SPI TX works correctly on Pi 4** — Commands are sent with proper register addresses
 
-### Root Cause: BCM2711 SPI + PG1302 Hardware Incompatibility
+5. **SPI RX returns all zeros on Pi 4** — MISO line provides no data at any speed (50kHz to 2MHz)
 
-The SPI controller on BCM2711 (Pi 4) fails to communicate with the PG1302 module, while the SPI controller on BCM2835 (Pi Zero) works correctly. This is a **hardware-level incompatibility**, not a software or GPIO configuration issue.
+### Working Hypothesis: BCM2711 SPI + PG1302 Interface Issue
 
-Possible causes (unconfirmed):
-- SPI signal integrity differences (different PCB layout, trace lengths)
-- SPI timing/clock characteristics differences between BCM2835 and BCM2711
-- Voltage level or drive strength differences
+The SPI controller on BCM2711 (Pi 4) successfully transmits commands, but receives no response from the PG1302 module. The same module works on BCM2835 (Pi Zero).
+
+Possible causes (under investigation):
+- SPI signal integrity differences between BCM2835 and BCM2711
+- Voltage level or drive strength differences affecting MISO
+- Power supply differences (3.3V rail characteristics)
 - The PG1302's SPI interface may be marginal and only works with BCM2835's characteristics
 
 ### What Differs Between WM1302 and PG1302
@@ -672,6 +677,97 @@ ERROR: Failed to set SX1250_0 in STANDBY_RC mode
 | GPIO 27 state | | | | |
 | SPI devices | | | | |
 | chip_id result | N/A | N/A | | |
+
+---
+
+### Phase 4: SPI Bus Analysis ✅ COMPLETED
+
+Tested 2026-02-01 on Pi 4 with PG1302 HAT attached. Added debug output to HAL to capture actual SPI TX/RX bytes.
+
+#### SPI Debug Instrumentation
+
+Modified `deps/lgw1302/platform-corecell/libloragw/src/loragw_spi.c` to print TX and RX buffers:
+```c
+printf("  SPI TX:"); for(int i=0;i<command_size;i++) printf(" %02X",out_buf[i]);
+printf(" -> RX:"); for(int i=0;i<command_size;i++) printf(" %02X",in_buf[i]); printf("\n");
+```
+
+#### SPI Communication Capture
+
+**Reading chip version register (0x5606):**
+```
+SPI TX: 00 56 06 00 00 -> RX: 00 00 00 00 00
+[lgw_connect:1192] chip version is 0x00 (v0.0)
+```
+
+**All subsequent register reads:**
+```
+SPI TX: 00 56 01 00 00 -> RX: 00 00 00 00 00
+SPI TX: 00 57 83 00 00 -> RX: 00 00 00 00 00
+SPI TX: 00 57 C0 00 00 -> RX: 00 00 00 00 00
+...
+```
+
+**Key observation:** Every SPI read returns `00 00 00 00 00`. The TX commands are correct (proper register addresses), but the MISO line returns no data.
+
+#### SPI Speed Tests
+
+| Speed | Result |
+|-------|--------|
+| 2 MHz (default) | RX: 00 00 00 00 00 |
+| 500 kHz | RX: 00 00 00 00 00 |
+| 100 kHz | RX: 00 00 00 00 00 |
+| 50 kHz | RX: 00 00 00 00 00 |
+
+SPI speed is NOT the issue. Even at 50 kHz (40x slower than default), MISO returns nothing.
+
+#### Alternative GPIO Test (BCM 25 for reset)
+
+Tested using BCM 25 instead of BCM 23 for SX1302_RESET:
+```
+SX1302 Reset: BCM 25 -> sysfs 537
+```
+
+Result: Same SPI failure — RX all zeros. GPIO pin choice does not affect the issue.
+
+#### GPIO and SPI Pin States During Test
+
+```
+=== Control GPIOs ===
+GPIO 22 (SX1261_NRESET): op -- pd | hi  (OUTPUT, HIGH)
+GPIO 23 (SX1302_RESET):  op -- pd | lo  (OUTPUT, LOW - not in reset)
+GPIO 27 (POWER_EN):      op -- pd | hi  (OUTPUT, HIGH - powered)
+
+=== SPI Pins ===
+GPIO 8  (CE0):   op -- pu | hi  (OUTPUT, HIGH - chip select inactive)
+GPIO 9  (MISO):  a0    pd | lo  (ALT0/SPI, LOW)
+GPIO 10 (MOSI):  a0    pd | lo  (ALT0/SPI, LOW)
+GPIO 11 (SCLK):  a0    pd | lo  (ALT0/SPI, LOW)
+```
+
+SPI pins are correctly configured in ALT0 mode. The MISO line (GPIO 9) is stuck LOW even during transactions.
+
+#### Phase 4 Conclusions
+
+1. **SPI TX is working correctly** — Commands are transmitted with proper register addresses
+2. **SPI RX returns all zeros** — MISO line provides no data
+3. **Issue is NOT timing-related** — Slowing SPI from 2MHz to 50kHz has no effect
+4. **Issue is NOT GPIO-related** — Alternative reset pin (BCM 25) produces same failure
+5. **The PG1302 module is not responding to SPI commands on BCM2711**
+
+---
+
+## Remaining Investigation Areas
+
+The following have NOT been tested yet:
+
+1. **SPI mode (CPOL/CPHA)** — Currently using Mode 0, could try other modes
+2. **Device tree overlays** — Check for SPI-related dtoverlays that differ between Pi Zero and Pi 4
+3. **Signal integrity** — Oscilloscope analysis of MOSI/MISO/SCLK signals
+4. **Voltage levels** — Measure actual voltage levels at SPI pins
+5. **Power supply** — Check 3.3V rail stability on PG1302 with Pi 4 vs Pi Zero
+
+---
 
 ## Code Changes in This Branch
 
