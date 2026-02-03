@@ -1,0 +1,46 @@
+# Build artifacts
+build-*/
+build-local/
+
+# Dependency cloned repos (will be fetched during build)
+deps/lgw/git-repo/
+deps/lgw/platform-*/
+deps/lgw1302/git-repo/
+deps/lgw1302/platform-*/
+deps/mbedtls/git-repo/
+deps/mbedtls/platform-*/
+deps/smtcpico/
+
+# Credentials (never include in image)
+*.key
+*.trust
+*.crt
+cups.uri
+tc.uri
+examples/corecell/cups-ttn/station.conf
+examples/corecell/cups-ttn/board.conf
+
+# Tests
+regr-tests/
+tests/
+
+# Documentation
+docs/
+*.md
+!examples/corecell/cups-ttn/*.md
+
+# Logs
+*.log
+
+# Editor and IDE files
+*~
+*.swp
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Docker files (no recursive build)
+docker-compose.yml

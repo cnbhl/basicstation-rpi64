@@ -1,0 +1,40 @@
+services:
+  basicstation:
+    build: .
+    container_name: basicstation
+    privileged: true
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      # Required: Board type (WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or custom)
+      BOARD: PG1302
+
+      # Required: TTN region (eu1, nam1, au1)
+      REGION: eu1
+
+      # Required: Gateway EUI (16 hex chars or 'auto' for hardware detection)
+      GATEWAY_EUI: auto
+
+      # Required: TTN CUPS API key
+      CUPS_KEY: ""  # Set via: CUPS_KEY=NNSXS.xxx... docker compose up
+
+      # Optional: GPS device path or 'none' (default: disabled)
+      # GPS_DEV: /dev/ttyS0
+
+      # Optional: Antenna gain in dBi, 0-15 (default: 0)
+      # ANTENNA_GAIN: 0
+
+      # Optional: SPI device path (default: /dev/spidev0.0)
+      # SPI_DEV: /dev/spidev0.0
+
+      # Optional: Log level (default: DEBUG)
+      # LOG_LEVEL: DEBUG
+
+      # Custom board GPIO pins (only when BOARD=custom)
+      # SX1302_RESET_GPIO: 23
+      # POWER_EN_GPIO: 27
+      # SX1261_RESET_GPIO: 22
+
+    # GPS device passthrough (uncomment if using GPS)
+    # devices:
+    #   - /dev/ttyS0:/dev/ttyS0
