@@ -126,6 +126,8 @@ sed -e "s|{{GATEWAY_EUI}}|$GATEWAY_EUI|g" \
     -e "s|{{LOG_FILE}}|/dev/stderr|g" \
     -e "s|/dev/spidev0.0|$SPI_DEV|g" \
     -e "s|\"log_level\": \"DEBUG\"|\"log_level\": \"$LOG_LEVEL\"|g" \
+    -e "s|\"log_size\":  10000000|\"log_size\":  0|g" \
+    -e "s|\"log_rotate\":  3|\"log_rotate\":  0|g" \
     "$STATION_CONF_TEMPLATE" > "$CONFIG_DIR/station.conf"
 
 info "station.conf generated"
@@ -168,5 +170,8 @@ echo ""
 # =============================================================================
 # Start station
 # =============================================================================
+# Remove stale PID file from previous container run (station checks this on startup)
+rm -f "$CONFIG_DIR/station.pid"
+
 info "Starting Basic Station..."
 exec "$STATION_BIN" -h "$CONFIG_DIR"
