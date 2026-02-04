@@ -8,6 +8,7 @@ Fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (v
 - Automated TTN CUPS setup with `setup-gateway.sh`
 - Automatic Gateway EUI detection from SX1302/SX1303
 - Systemd service configuration
+- **Docker support** for containerized deployment
 
 See [docs/FEATURES.md](docs/FEATURES.md) for a complete list of features and fixes.
 
@@ -103,6 +104,41 @@ Run `sudo raspi-config` → Interface Options:
 
 Reboot after changes.
 
+## Docker Deployment
+
+Run the station as a Docker container — no build tools or dependencies needed on the host.
+
+```bash
+docker build -t basicstation .
+
+docker run -d --privileged --network host \
+  --name basicstation --restart unless-stopped \
+  -e BOARD=PG1302 -e REGION=eu1 \
+  -e GATEWAY_EUI=auto \
+  -e CUPS_KEY="NNSXS.xxx..." \
+  basicstation
+```
+
+Or with docker compose:
+
+```bash
+CUPS_KEY="NNSXS.xxx..." docker compose up -d
+docker logs -f basicstation
+```
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BOARD` | Yes | -- | WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or `custom` |
+| `REGION` | Yes | -- | TTN region: eu1, nam1, au1 |
+| `GATEWAY_EUI` | Yes | -- | 16 hex chars or `auto` (chip detection) |
+| `CUPS_KEY` | Yes | -- | TTN CUPS API key |
+| `GPS_DEV` | No | _(disabled)_ | GPS device path or `none` |
+| `ANTENNA_GAIN` | No | `0` | Antenna gain in dBi (0-15) |
+| `SPI_DEV` | No | `/dev/spidev0.0` | SPI device path |
+| `LOG_LEVEL` | No | `DEBUG` | Station log level |
+
+For custom boards, set `BOARD=custom` and provide `SX1302_RESET_GPIO`, `POWER_EN_GPIO`, `SX1261_RESET_GPIO`.
+
 ## Running
 
 **Via systemd** (if configured during setup):
@@ -123,6 +159,9 @@ cd examples/corecell/cups-ttn
 ```
 basicstation/
 ├── setup-gateway.sh              # Main setup script
+├── Dockerfile                    # Multi-stage Docker build
+├── docker-compose.yml            # Docker compose example
+├── docker/entrypoint.sh          # Container entrypoint
 ├── lib/                          # Modular shell libraries
 │   ├── common.sh                 # Output, logging, dependency checks
 │   ├── validation.sh             # Input validation

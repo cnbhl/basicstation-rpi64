@@ -557,8 +557,10 @@ docker run -d --privileged --network host \
 
 - Requires `privileged: true` or sysfs GPIO access for concentrator reset
 - Requires `network_mode: host` for LoRaWAN packet reception
-- Logs go to stderr (use `docker logs` to view)
+- Logs go to stderr via station's built-in stderr mode (`log_file: "stderr"`) — visible via `docker logs`
 - Uses the same `station.conf.template` and `board.conf.template` as `setup-gateway.sh`
+- Builder stage requires `python3`, `python3-jsonschema`, `python3-jinja2` for mbedtls 3.6.0 PSA crypto wrapper generation
+- Stale PID files (`/var/tmp/station.pid`, `/tmp/station.pid`) are cleaned up before station start to prevent restart failures
 
 ## Build System Notes
 
@@ -657,7 +659,7 @@ Format: `2.0.6-cnbhl.X.Y` or `2.0.6-cnbhl.X.Ya`
 - **Tag**: No "v" prefix (e.g., `2.0.6-cnbhl.1.0`)
 - **Release title**: `Release 2.0.6-cnbhl.X.Y` (prefix with "Release ")
 
-**Current version**: `2.0.6-cnbhl.1.5`
+**Current version**: `2.0.6-cnbhl.1.6`
 
 **History**: Versions `2.0.6-cnbhl.1` through `2.0.6-cnbhl.5` used the old single-number scheme.
 Starting with `2.0.6-cnbhl.1.0`, we use the new X.Y format.
