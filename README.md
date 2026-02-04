@@ -8,10 +8,31 @@ Fork of [lorabasics/basicstation](https://github.com/lorabasics/basicstation) (v
 - Automated TTN CUPS setup with `setup-gateway.sh`
 - Automatic Gateway EUI detection from SX1302/SX1303
 - Systemd service configuration
+- **Docker support** for containerized deployment
 
 See [docs/FEATURES.md](docs/FEATURES.md) for a complete list of features and fixes.
 
 For upstream documentation: [doc.sm.tc/station](https://doc.sm.tc/station)
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Options](#options)
+  - [Non-Interactive Mode](#non-interactive-mode)
+- [Supported Boards](#supported-boards)
+- [Tested Platforms](#tested-platforms)
+- [Prerequisites](#prerequisites)
+- [Docker Deployment](#docker-deployment)
+  - [Step 1: Detect Gateway EUI](#step-1-detect-gateway-eui)
+  - [Step 2: Start the station](#step-2-start-the-station)
+  - [Environment Variables](#environment-variables)
+- [Running](#running)
+- [Repository Structure](#repository-structure)
+- [Testing](#testing)
+- [Raspberry Pi GPIO Support](#raspberry-pi-gpio-support)
+- [Dependencies](#dependencies)
+- [Third-Party Components](#third-party-components)
+- [License](#license)
 
 ## Quick Start
 
@@ -103,6 +124,58 @@ Run `sudo raspi-config` → Interface Options:
 
 Reboot after changes.
 
+## Docker Deployment
+
+Run the station as a Docker container — no build tools or dependencies needed on the host.
+
+```bash
+docker build -t basicstation .
+```
+
+### Step 1: Detect Gateway EUI
+
+For a new board, detect the EUI first to register on TTN:
+
+```bash
+docker run --rm --privileged -e BOARD=WM1302 -e EUI_ONLY=1 basicstation
+```
+
+This prints the Gateway EUI and exits. Register the gateway at [TTN Console](https://console.cloud.thethings.network/) and generate a CUPS API key.
+
+### Step 2: Start the station
+
+```bash
+docker run -d --privileged --network host \
+  --name basicstation --restart unless-stopped \
+  -e BOARD=WM1302 -e REGION=eu1 \
+  -e GATEWAY_EUI=auto \
+  -e CUPS_KEY="NNSXS.xxx..." \
+  basicstation
+```
+
+Or with docker compose:
+
+```bash
+CUPS_KEY="NNSXS.xxx..." docker compose up -d
+docker logs -f basicstation
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BOARD` | Yes | -- | WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or `custom` |
+| `REGION` | Yes | -- | TTN region: eu1, nam1, au1 |
+| `GATEWAY_EUI` | Yes | -- | 16 hex chars or `auto` (chip detection) |
+| `CUPS_KEY` | Yes | -- | TTN CUPS API key |
+| `EUI_ONLY` | No | -- | Set to `1` to detect EUI and exit (no CUPS_KEY needed) |
+| `GPS_DEV` | No | _(disabled)_ | GPS device path or `none` |
+| `ANTENNA_GAIN` | No | `0` | Antenna gain in dBi (0-15) |
+| `SPI_DEV` | No | `/dev/spidev0.0` | SPI device path |
+| `LOG_LEVEL` | No | `DEBUG` | Station log level |
+
+For custom boards, set `BOARD=custom` and provide `SX1302_RESET_GPIO`, `POWER_EN_GPIO`, `SX1261_RESET_GPIO`.
+
 ## Running
 
 **Via systemd** (if configured during setup):
@@ -123,6 +196,9 @@ cd examples/corecell/cups-ttn
 ```
 basicstation/
 ├── setup-gateway.sh              # Main setup script
+├── Dockerfile                    # Multi-stage Docker build
+├── docker-compose.yml            # Docker compose example
+├── docker/entrypoint.sh          # Container entrypoint
 ├── lib/                          # Modular shell libraries
 │   ├── common.sh                 # Output, logging, dependency checks
 │   ├── validation.sh             # Input validation

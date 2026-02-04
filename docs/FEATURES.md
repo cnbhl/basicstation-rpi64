@@ -12,6 +12,7 @@ Changes in [cnbhl/basicstation-rpi64](https://github.com/cnbhl/basicstation-rpi6
 - **Automatic Gateway EUI detection** - Read EUI from SX1302/SX1303 chip via SPI
 - **GPS auto-detection** - Scan serial ports and baud rates to find GPS module
 - **Systemd service integration** - Automatic service setup with startup verification
+- **Docker support** - Containerized deployment with multi-stage build, auto EUI detection, and `docker logs` integration
 - **Antenna gain configuration** - Setup wizard prompts for antenna gain to ensure ETSI TX power compliance
 - **Duty cycle enforcement** - ETSI EN 300 220 compliant sliding window tracking (EU868 per-band, AS923/KR920 per-channel)
 - **GPS/PPS recovery** - Auto-reset when PPS signal lost >90s, restart after 6 failures

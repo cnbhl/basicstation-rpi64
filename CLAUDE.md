@@ -12,6 +12,7 @@ This is a fork of [lorabasics/basicstation](https://github.com/lorabasics/basics
 - Automatic Gateway EUI detection from SX1302/SX1303 chips
 - Systemd service configuration
 - Fine timestamp support for SX1302/SX1303 with GPS PPS
+- Docker support for containerized deployment
 
 For upstream Basic Station documentation: https://doc.sm.tc/station
 
@@ -481,6 +482,96 @@ sudo systemctl start basicstation.service
 sudo journalctl -u basicstation.service -f
 ```
 
+## Docker Support
+
+Build and run the station as a Docker container on Raspberry Pi.
+
+### Build
+
+```bash
+docker build -t basicstation .
+# Debug variant:
+docker build -t basicstation --build-arg VARIANT=debug .
+```
+
+### Detect EUI (new board)
+
+```bash
+docker run --rm --privileged -e BOARD=WM1302 -e EUI_ONLY=1 basicstation
+```
+
+Register the printed EUI on TTN Console, then start:
+
+### Run
+
+```bash
+# Using docker-compose (recommended)
+CUPS_KEY="NNSXS.xxx..." docker compose up -d
+docker logs -f basicstation
+
+# Using docker run
+docker run -d --privileged --network host \
+  --name basicstation --restart unless-stopped \
+  -e BOARD=PG1302 -e REGION=eu1 \
+  -e GATEWAY_EUI=auto \
+  -e CUPS_KEY="NNSXS.xxx..." \
+  basicstation
+```
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BOARD` | Yes | -- | WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or `custom` |
+| `REGION` | Yes | -- | TTN region: eu1, nam1, au1 |
+| `GATEWAY_EUI` | Yes | -- | 16 hex chars or `auto` (chip detection) |
+| `CUPS_KEY` | Yes | -- | TTN CUPS API key (NNSXS.xxx...) |
+| `EUI_ONLY` | No | -- | Set to `1` to detect Gateway EUI and exit (only `BOARD` required) |
+| `GPS_DEV` | No | _(disabled)_ | GPS device path (e.g. `/dev/ttyS0`) or `none` |
+| `ANTENNA_GAIN` | No | `0` | Antenna gain in dBi (0-15) |
+| `SPI_DEV` | No | `/dev/spidev0.0` | SPI device path |
+| `LOG_LEVEL` | No | `DEBUG` | Station log level |
+| `SX1302_RESET_GPIO` | If custom | -- | BCM pin for SX1302 reset |
+| `POWER_EN_GPIO` | If custom | -- | BCM pin for power enable |
+| `SX1261_RESET_GPIO` | If custom | -- | BCM pin for SX1261 reset |
+
+### Docker Files
+
+- `Dockerfile` - Multi-stage build (builder compiles station + chip_id, runner is minimal)
+- `docker/entrypoint.sh` - Validates env vars, generates config, starts station
+- `docker-compose.yml` - Example compose file with all env vars documented
+- `.dockerignore` - Excludes build artifacts, credentials, tests from context
+
+### Container Layout
+
+```
+/app/
+├── bin/station              # Station binary
+├── bin/chip_id              # EUI detection tool
+├── scripts/
+│   ├── reset_lgw.sh         # GPIO reset (SX1302 + SX1261 + Power EN)
+│   ├── rinit.sh             # Radio init wrapper
+│   └── board.conf           # Generated at runtime by entrypoint
+├── templates/
+│   ├── station.conf.template
+│   └── board.conf.template
+├── config/                  # Station home dir (generated at runtime)
+│   ├── station.conf
+│   ├── cups.uri
+│   ├── cups.key
+│   └── cups.trust
+└── entrypoint.sh
+```
+
+### Notes
+
+- Requires `privileged: true` or sysfs GPIO access for concentrator reset
+- Requires `network_mode: host` for LoRaWAN packet reception
+- Logs go to stderr via station's built-in stderr mode (`log_file: "stderr"`) — visible via `docker logs`
+- Uses the same `station.conf.template` and `board.conf.template` as `setup-gateway.sh`
+- Builder stage requires `python3`, `python3-jsonschema`, `python3-jinja2` for mbedtls 3.6.0 PSA crypto wrapper generation
+- Stale PID files (`/var/tmp/station.pid`, `/tmp/station.pid`) are cleaned up before station start to prevent restart failures
+
 ## Build System Notes
 
 Platform/variant configuration in `setup.gmk`:
@@ -578,7 +669,7 @@ Format: `2.0.6-cnbhl.X.Y` or `2.0.6-cnbhl.X.Ya`
 - **Tag**: No "v" prefix (e.g., `2.0.6-cnbhl.1.0`)
 - **Release title**: `Release 2.0.6-cnbhl.X.Y` (prefix with "Release ")
 
-**Current version**: `2.0.6-cnbhl.1.5`
+**Current version**: `2.0.6-cnbhl.1.6`
 
 **History**: Versions `2.0.6-cnbhl.1` through `2.0.6-cnbhl.5` used the old single-number scheme.
 Starting with `2.0.6-cnbhl.1.0`, we use the new X.Y format.

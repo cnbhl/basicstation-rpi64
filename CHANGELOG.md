@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 2.0.6-cnbhl.1.6 - 2025-02-04
+
+* feature: Docker support for containerized deployment
+  - Multi-stage Dockerfile (builder compiles station + chip_id, runner is minimal Debian bookworm-slim)
+  - `docker/entrypoint.sh` validates env vars, generates config, auto-detects Gateway EUI, starts station
+  - `docker-compose.yml` with all environment variables documented
+  - `.dockerignore` excludes build artifacts, credentials, tests
+  - Support for all board types (WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, custom GPIO)
+  - Auto EUI detection from SX1302 chip via `chip_id`
+  - GPS passthrough support
+  - Custom SPI device path support
+  - `EUI_ONLY=1` mode for detecting Gateway EUI before TTN registration
+* fix: Add python3, python3-jsonschema, python3-jinja2 to Docker builder (required by mbedtls 3.6.0)
+* fix: Clean up stale PID files before station start in Docker (prevents restart failures)
+* fix: Use station's built-in `stderr` log mode instead of `/dev/stderr` path for Docker log compatibility
 * fix: Zero-initialize ifconf struct before JSON channel config parsing (cherry-pick from MultiTech `64f634f`)
 * feature: mbedtls 3.x compatibility with TLS 1.3 support (cherry-pick from MultiTech)
   - PSA crypto initialization for mbedtls 3.x
@@ -22,6 +37,10 @@
   - LNS can control GPS via `router_config` with `gps_enable` field
   - Advertises `gps-ctrl` feature flag to LNS
 * fix: Use correct TX command when checking nocca response (cherry-pick from MultiTech `5c54f11`)
+* feature: Fine timestamp support for SX1302/SX1303 with GPS PPS
+* feature: SF5/SF6 spreading factor support (LoRaWAN RP2 1.0.5)
+* fix: SX1302 LBT error handling (correct error constants for SX1302 vs SX1301)
+* fix: Exit on stuck concentrator (excessive clock drift detection)
 
 ## 2.0.6-cnbhl.1.0 - 2025-01-25
 
