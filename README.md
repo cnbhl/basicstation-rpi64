@@ -14,6 +14,23 @@ See [docs/FEATURES.md](docs/FEATURES.md) for a complete list of features and fix
 
 For upstream documentation: [doc.sm.tc/station](https://doc.sm.tc/station)
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Options](#options)
+  - [Non-Interactive Mode](#non-interactive-mode)
+- [Supported Boards](#supported-boards)
+- [Tested Platforms](#tested-platforms)
+- [Prerequisites](#prerequisites)
+- [Docker Deployment](#docker-deployment)
+- [Running](#running)
+- [Repository Structure](#repository-structure)
+- [Testing](#testing)
+- [Raspberry Pi GPIO Support](#raspberry-pi-gpio-support)
+- [Dependencies](#dependencies)
+- [Third-Party Components](#third-party-components)
+- [License](#license)
+
 ## Quick Start
 
 ```bash
