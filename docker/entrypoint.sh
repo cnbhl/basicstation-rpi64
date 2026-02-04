@@ -94,6 +94,7 @@ if [[ "${EUI_ONLY:-}" == "1" ]]; then
     echo "Register this gateway at https://console.cloud.thethings.network/"
     echo "Then start the container with your CUPS key:"
     echo ""
+    echo "  docker rm -f basicstation 2>/dev/null; \\"
     echo "  docker run -d --privileged --network host \\"
     echo "    --name basicstation --restart unless-stopped \\"
     echo "    -e BOARD=$BOARD -e REGION=eu1 \\"
