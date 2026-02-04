@@ -23,6 +23,9 @@ For upstream documentation: [doc.sm.tc/station](https://doc.sm.tc/station)
 - [Tested Platforms](#tested-platforms)
 - [Prerequisites](#prerequisites)
 - [Docker Deployment](#docker-deployment)
+  - [Step 1: Detect Gateway EUI](#step-1-detect-gateway-eui)
+  - [Step 2: Start the station](#step-2-start-the-station)
+  - [Environment Variables](#environment-variables)
 - [Running](#running)
 - [Repository Structure](#repository-structure)
 - [Testing](#testing)
@@ -127,10 +130,24 @@ Run the station as a Docker container — no build tools or dependencies needed 
 
 ```bash
 docker build -t basicstation .
+```
 
+### Step 1: Detect Gateway EUI
+
+For a new board, detect the EUI first to register on TTN:
+
+```bash
+docker run --rm --privileged -e BOARD=WM1302 -e EUI_ONLY=1 basicstation
+```
+
+This prints the Gateway EUI and exits. Register the gateway at [TTN Console](https://console.cloud.thethings.network/) and generate a CUPS API key.
+
+### Step 2: Start the station
+
+```bash
 docker run -d --privileged --network host \
   --name basicstation --restart unless-stopped \
-  -e BOARD=PG1302 -e REGION=eu1 \
+  -e BOARD=WM1302 -e REGION=eu1 \
   -e GATEWAY_EUI=auto \
   -e CUPS_KEY="NNSXS.xxx..." \
   basicstation
@@ -143,12 +160,15 @@ CUPS_KEY="NNSXS.xxx..." docker compose up -d
 docker logs -f basicstation
 ```
 
+### Environment Variables
+
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `BOARD` | Yes | -- | WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or `custom` |
 | `REGION` | Yes | -- | TTN region: eu1, nam1, au1 |
 | `GATEWAY_EUI` | Yes | -- | 16 hex chars or `auto` (chip detection) |
 | `CUPS_KEY` | Yes | -- | TTN CUPS API key |
+| `EUI_ONLY` | No | -- | Set to `1` to detect EUI and exit (no CUPS_KEY needed) |
 | `GPS_DEV` | No | _(disabled)_ | GPS device path or `none` |
 | `ANTENNA_GAIN` | No | `0` | Antenna gain in dBi (0-15) |
 | `SPI_DEV` | No | `/dev/spidev0.0` | SPI device path |

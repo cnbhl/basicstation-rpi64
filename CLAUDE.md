@@ -517,6 +517,7 @@ docker run -d --privileged --network host \
 | `REGION` | Yes | -- | TTN region: eu1, nam1, au1 |
 | `GATEWAY_EUI` | Yes | -- | 16 hex chars or `auto` (chip detection) |
 | `CUPS_KEY` | Yes | -- | TTN CUPS API key (NNSXS.xxx...) |
+| `EUI_ONLY` | No | -- | Set to `1` to detect Gateway EUI and exit (only `BOARD` required) |
 | `GPS_DEV` | No | _(disabled)_ | GPS device path (e.g. `/dev/ttyS0`) or `none` |
 | `ANTENNA_GAIN` | No | `0` | Antenna gain in dBi (0-15) |
 | `SPI_DEV` | No | `/dev/spidev0.0` | SPI device path |

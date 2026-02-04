@@ -25,18 +25,9 @@ info() { echo "INFO: $*"; }
 warn() { echo "WARN: $*" >&2; }
 
 # =============================================================================
-# Validate required environment variables
+# Validate BOARD (required for all modes)
 # =============================================================================
-[[ -z "${BOARD:-}" ]]       && die "BOARD is required (WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or custom)"
-[[ -z "${REGION:-}" ]]      && die "REGION is required (eu1, nam1, au1)"
-[[ -z "${GATEWAY_EUI:-}" ]] && die "GATEWAY_EUI is required (16 hex chars or 'auto')"
-[[ -z "${CUPS_KEY:-}" ]]    && die "CUPS_KEY is required (TTN CUPS API key)"
-
-# Validate region
-case "$REGION" in
-    eu1|nam1|au1) ;;
-    *) die "Invalid REGION '$REGION'. Must be eu1, nam1, or au1" ;;
-esac
+[[ -z "${BOARD:-}" ]] && die "BOARD is required (WM1302, PG1302, LR1302, SX1302_WS, SEMTECH, or custom)"
 
 # =============================================================================
 # Resolve board GPIO pins
@@ -70,10 +61,9 @@ EOF
 info "Board configuration written ($BOARD: reset=$SX1302_RESET_BCM, power=$SX1302_POWER_EN_BCM, sx1261=$SX1261_RESET_BCM)"
 
 # =============================================================================
-# Resolve Gateway EUI
+# Detect Gateway EUI from hardware
 # =============================================================================
-if [[ "$GATEWAY_EUI" == "auto" ]]; then
-    info "Auto-detecting Gateway EUI from SX1302 chip..."
+detect_eui() {
     if [[ ! -x "$CHIP_ID_BIN" ]]; then
         die "chip_id binary not found. Cannot auto-detect EUI."
     fi
@@ -81,12 +71,58 @@ if [[ "$GATEWAY_EUI" == "auto" ]]; then
     SPI_DEV="${SPI_DEV:-/dev/spidev0.0}"
 
     # chip_id calls system("./reset_lgw.sh start"), so we must cd to scripts dir
+    local chip_output
     chip_output=$(cd "$SCRIPTS_DIR" && "$CHIP_ID_BIN" -d "$SPI_DEV" 2>&1) || true
     GATEWAY_EUI=$(printf '%s' "$chip_output" | grep -i "concentrator EUI" | sed 's/.*0x\([0-9a-fA-F]*\).*/\1/' | tr '[:lower:]' '[:upper:]') || true
 
     if [[ -z "$GATEWAY_EUI" ]] || [[ ${#GATEWAY_EUI} -ne 16 ]]; then
         die "Failed to auto-detect EUI. chip_id output: $chip_output"
     fi
+}
+
+# =============================================================================
+# EUI-only mode: detect EUI and exit (for initial gateway registration)
+# =============================================================================
+if [[ "${EUI_ONLY:-}" == "1" ]]; then
+    info "EUI detection mode"
+    detect_eui
+    echo ""
+    echo "========================================="
+    echo " Gateway EUI: $GATEWAY_EUI"
+    echo "========================================="
+    echo ""
+    echo "Register this gateway at https://console.cloud.thethings.network/"
+    echo "Then start the container with your CUPS key:"
+    echo ""
+    echo "  docker run -d --privileged --network host \\"
+    echo "    --name basicstation --restart unless-stopped \\"
+    echo "    -e BOARD=$BOARD -e REGION=eu1 \\"
+    echo "    -e GATEWAY_EUI=auto \\"
+    echo "    -e CUPS_KEY=\"NNSXS.xxx...\" \\"
+    echo "    basicstation"
+    echo ""
+    exit 0
+fi
+
+# =============================================================================
+# Validate remaining required environment variables (normal mode)
+# =============================================================================
+[[ -z "${REGION:-}" ]]      && die "REGION is required (eu1, nam1, au1)"
+[[ -z "${GATEWAY_EUI:-}" ]] && die "GATEWAY_EUI is required (16 hex chars or 'auto')"
+[[ -z "${CUPS_KEY:-}" ]]    && die "CUPS_KEY is required (TTN CUPS API key)"
+
+# Validate region
+case "$REGION" in
+    eu1|nam1|au1) ;;
+    *) die "Invalid REGION '$REGION'. Must be eu1, nam1, or au1" ;;
+esac
+
+# =============================================================================
+# Resolve Gateway EUI
+# =============================================================================
+if [[ "$GATEWAY_EUI" == "auto" ]]; then
+    info "Auto-detecting Gateway EUI from SX1302 chip..."
+    detect_eui
     info "Detected Gateway EUI: $GATEWAY_EUI"
 else
     # Validate provided EUI
