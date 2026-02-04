@@ -494,6 +494,14 @@ docker build -t basicstation .
 docker build -t basicstation --build-arg VARIANT=debug .
 ```
 
+### Detect EUI (new board)
+
+```bash
+docker run --rm --privileged -e BOARD=WM1302 -e EUI_ONLY=1 basicstation
+```
+
+Register the printed EUI on TTN Console, then start:
+
 ### Run
 
 ```bash
@@ -503,6 +511,7 @@ docker logs -f basicstation
 
 # Using docker run
 docker run -d --privileged --network host \
+  --name basicstation --restart unless-stopped \
   -e BOARD=PG1302 -e REGION=eu1 \
   -e GATEWAY_EUI=auto \
   -e CUPS_KEY="NNSXS.xxx..." \

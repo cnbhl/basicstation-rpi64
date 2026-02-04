@@ -13,6 +13,7 @@
   - Auto EUI detection from SX1302 chip via `chip_id`
   - GPS passthrough support
   - Custom SPI device path support
+  - `EUI_ONLY=1` mode for detecting Gateway EUI before TTN registration
 * fix: Add python3, python3-jsonschema, python3-jinja2 to Docker builder (required by mbedtls 3.6.0)
 * fix: Clean up stale PID files before station start in Docker (prevents restart failures)
 * fix: Use station's built-in `stderr` log mode instead of `/dev/stderr` path for Docker log compatibility
