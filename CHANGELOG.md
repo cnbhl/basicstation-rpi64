@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* fix: Detect the GPIO base by the header controller's label (`pinctrl-rp1`, `pinctrl-bcm2711`,
+  `pinctrl-bcm2835`) instead of `gpiochip0` or the first chip whose label contains "gpio".
+  On a Pi 5 with kernel 6.12.115 the RP1 controller moved to gpiochip15 and the first chip is
+  `gpio-brcmstb` with base 512, so `reset_lgw.sh` toggled the HDMI0 DDC lines instead of the
+  concentrator's reset/power pins and the station failed with `lgw_start: failed to setup radio 0`
+  - `GPIO_BASE` from the environment or `board.conf` now overrides detection, as documented
+  - Debugfs lines without a `GPIOs <base>-<end>` range (newer kernels, see #39) are skipped
+  - Model fallback recognises the Compute Module 5 (base 571)
+  - New `reset_lgw.sh detect` prints the pin mapping without touching any GPIO
+  - Unit tests for the detection with fake sysfs/debugfs layouts
+
 ## 2.0.6-cnbhl.1.6 - 2025-02-04
 
 * feature: Docker support for containerized deployment

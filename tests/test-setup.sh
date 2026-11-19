@@ -462,6 +462,126 @@ test_copy_file_nonexistent_source() {
 }
 
 #######################################
+# reset_lgw.sh GPIO base detection Tests
+#######################################
+
+# Create a fake sysfs GPIO chip: make_gpiochip <sysfs_dir> <base> <label>
+make_gpiochip() {
+    local dir="$1/gpiochip$2"
+    mkdir -p "$dir"
+    echo "$2" > "$dir/base"
+    echo "$3" > "$dir/label"
+}
+
+# Run "reset_lgw.sh detect" against a fake system and print the detected base.
+# Usage: detect_base_for <case_dir> [VAR=value ...]
+# <case_dir> may contain sys/ (fake /sys/class/gpio), debug_gpio, model.
+detect_base_for() {
+    local case_dir="$1"
+    shift
+    # Run a copy so a local board.conf next to the real script cannot interfere
+    cp "$SCRIPT_DIR/examples/corecell/cups-ttn/reset_lgw.sh" "$case_dir/reset_lgw.sh"
+    env -i PATH="$PATH" \
+        GPIO_SYSFS_DIR="$case_dir/sys" \
+        GPIO_DEBUGFS="$case_dir/debug_gpio" \
+        DT_MODEL_FILE="$case_dir/model" \
+        "$@" \
+        sh "$case_dir/reset_lgw.sh" detect 2>/dev/null \
+        | sed -n 's/^Detected GPIO base offset: //p'
+}
+
+test_gpio_base_pi5_kernel_6_12() {
+    # Pi 5 on kernel 6.12.115: brcmstb chips come first (base 512),
+    # the RP1 header controller is gpiochip15 with base 571
+    local d="$TEST_TEMP/gpio_pi5"
+    mkdir -p "$d/sys"
+    make_gpiochip "$d/sys" 512 "gpio-brcmstb@107d517c00"
+    make_gpiochip "$d/sys" 529 "gpio-brcmstb@107d517c20"
+    make_gpiochip "$d/sys" 535 "gpio-brcmstb@107d508500"
+    make_gpiochip "$d/sys" 567 "gpio-brcmstb@107d508520"
+    make_gpiochip "$d/sys" 571 "pinctrl-rp1"
+    cat > "$d/debug_gpio" <<'EOF'
+gpiochip11: GPIOs 512-528, parent: platform/107d517c00.gpio, gpio-brcmstb@107d517c00:
+gpiochip15: GPIOs 571-624, parent: platform/1f000d0000.gpio, pinctrl-rp1:
+EOF
+    # No model file: the result must come from the chip labels
+
+    [[ "$(detect_base_for "$d")" == "571" ]]
+}
+
+test_gpio_base_pi4() {
+    local d="$TEST_TEMP/gpio_pi4"
+    mkdir -p "$d/sys"
+    make_gpiochip "$d/sys" 504 "raspberrypi-exp-gpio"
+    make_gpiochip "$d/sys" 512 "pinctrl-bcm2711"
+
+    [[ "$(detect_base_for "$d")" == "512" ]]
+}
+
+test_gpio_base_pi3() {
+    local d="$TEST_TEMP/gpio_pi3"
+    mkdir -p "$d/sys"
+    make_gpiochip "$d/sys" 504 "raspberrypi-exp-gpio"
+    make_gpiochip "$d/sys" 512 "pinctrl-bcm2835"
+
+    [[ "$(detect_base_for "$d")" == "512" ]]
+}
+
+test_gpio_base_debugfs_only() {
+    # No sysfs labels: base comes from the debugfs line of the RP1 controller,
+    # not from gpiochip0 or the first chip listed
+    local d="$TEST_TEMP/gpio_debugfs"
+    mkdir -p "$d/sys"
+    cat > "$d/debug_gpio" <<'EOF'
+gpiochip11: GPIOs 512-528, parent: platform/107d517c00.gpio, gpio-brcmstb@107d517c00:
+ gpio-512 (-                   )
+gpiochip12: GPIOs 529-534, parent: platform/107d517c00.gpio, gpio-brcmstb@107d517c20:
+gpiochip15: GPIOs 571-624, parent: platform/1f000d0000.gpio, pinctrl-rp1:
+EOF
+
+    [[ "$(detect_base_for "$d")" == "571" ]]
+}
+
+test_gpio_base_debugfs_without_range() {
+    # CM4 kernel prints "gpiochip0: 58 GPIOs, ..." without a base (issue #39):
+    # skip that line and fall back to the model
+    local d="$TEST_TEMP/gpio_cm4"
+    mkdir -p "$d/sys"
+    cat > "$d/debug_gpio" <<'EOF'
+gpiochip0: 58 GPIOs, parent: platform/fe200000.gpio, pinctrl-bcm2711:
+gpiochip1: 8 GPIOs, parent: platform/soc:firmware:gpio, raspberrypi-exp-gpio, can sleep:
+EOF
+    printf 'Raspberry Pi Compute Module 4 Rev 1.0\0' > "$d/model"
+
+    [[ "$(detect_base_for "$d")" == "512" ]]
+}
+
+test_gpio_base_model_fallback() {
+    local result=true
+    local d="$TEST_TEMP/gpio_model"
+    mkdir -p "$d/sys"
+
+    printf 'Raspberry Pi 5 Model B Rev 1.0\0' > "$d/model"
+    [[ "$(detect_base_for "$d")" == "571" ]] || result=false
+
+    printf 'Raspberry Pi Compute Module 5 Rev 1.0\0' > "$d/model"
+    [[ "$(detect_base_for "$d")" == "571" ]] || result=false
+
+    printf 'Raspberry Pi Zero W Rev 1.1\0' > "$d/model"
+    [[ "$(detect_base_for "$d")" == "0" ]] || result=false
+
+    $result
+}
+
+test_gpio_base_override() {
+    local d="$TEST_TEMP/gpio_override"
+    mkdir -p "$d/sys"
+    make_gpiochip "$d/sys" 571 "pinctrl-rp1"
+
+    [[ "$(detect_base_for "$d" GPIO_BASE=600)" == "600" ]]
+}
+
+#######################################
 # Main
 #######################################
 
@@ -521,6 +641,15 @@ main() {
     run_test "process_template - special chars" test_process_template_special_chars
     run_test "copy_file - with permissions" test_copy_file_with_permissions
     run_test "copy_file - nonexistent source" test_copy_file_nonexistent_source
+
+    # Run reset_lgw.sh GPIO base detection tests
+    run_test "gpio base - Pi 5 on kernel 6.12 (renumbered chips)" test_gpio_base_pi5_kernel_6_12
+    run_test "gpio base - Pi 4" test_gpio_base_pi4
+    run_test "gpio base - Pi 3" test_gpio_base_pi3
+    run_test "gpio base - debugfs only" test_gpio_base_debugfs_only
+    run_test "gpio base - debugfs without range (CM4)" test_gpio_base_debugfs_without_range
+    run_test "gpio base - model fallback" test_gpio_base_model_fallback
+    run_test "gpio base - GPIO_BASE override" test_gpio_base_override
 
     # Teardown
     teardown_test_env

@@ -122,6 +122,16 @@ The `reset_lgw.sh` script auto-detects the GPIO base offset:
 | Pi 4, Pi 3, CM4 | 512 | 535 |
 | Pi 2, Pi 1, Zero | 0 | 23 |
 
+The offset is read from the GPIO controller that drives the 40-pin header,
+found by its label: `pinctrl-rp1` (Pi 5 / CM5), `pinctrl-bcm2711` (Pi 4 / CM4)
+or `pinctrl-bcm2835` (older models). The table above shows typical values; the
+script uses whatever base the running kernel reports for that controller.
+Check the mapping without touching any GPIO:
+
+```bash
+sudo ./reset_lgw.sh detect
+```
+
 ## Custom Board Configuration
 
 If your board isn't listed, select "CUSTOM" during setup and enter:
@@ -185,7 +195,9 @@ sudo ./reset_lgw.sh start
 
 ### Wrong GPIO Base Detected
 
-Override auto-detection by setting `GPIO_BASE` before running:
+Check what the script detects (`sudo ./reset_lgw.sh detect`). If it is
+wrong, override auto-detection by setting `GPIO_BASE` before running, or
+permanently by adding `GPIO_BASE=<base>` to `board.conf`:
 ```bash
 export GPIO_BASE=512
 ./reset_lgw.sh start
