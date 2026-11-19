@@ -232,7 +232,14 @@ Handles Raspberry Pi GPIO offset differences:
 - Pi 4/3: GPIO base 512
 - Older: GPIO base 0
 
-Auto-detection via `/sys/kernel/debug/gpio`, `/sys/class/gpio/gpiochip*/base`, or `/proc/device-tree/model` fallback.
+Detection order: `GPIO_BASE` override (environment or `board.conf`), then the base of the
+header controller found by label (`pinctrl-rp1`, `pinctrl-bcm2711`, `pinctrl-bcm2835`) in
+`/sys/class/gpio/gpiochip*/label`, then the same label in `/sys/kernel/debug/gpio`, then a
+`/proc/device-tree/model` fallback. Never select a chip by index (`gpiochip0`) or by a generic
+"gpio" substring: kernel 6.12.115 on the Pi 5 lists `gpio-brcmstb` chips (base 512) first and
+moved RP1 to gpiochip15. `reset_lgw.sh detect` prints the mapping without touching GPIOs; the
+detection is covered by `tests/test-setup.sh` (fake sysfs/debugfs via `GPIO_SYSFS_DIR`,
+`GPIO_DEBUGFS`, `DT_MODEL_FILE`).
 
 ### Duty Cycle Enforcement (cherry-picked from MultiTech)
 

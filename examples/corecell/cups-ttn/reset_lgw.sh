@@ -33,55 +33,79 @@ AD5338R_RESET_BCM=${AD5338R_RESET_BCM:-}
 # =============================================================================
 # Auto-detect GPIO chip base offset for different Raspberry Pi models
 # =============================================================================
+# The 40-pin header is driven by one GPIO controller, identified by its label:
+#   pinctrl-rp1      Raspberry Pi 5 / CM5 (RP1)
+#   pinctrl-bcm2711  Raspberry Pi 4 / 400 / CM4
+#   pinctrl-bcm2835  Raspberry Pi 1 / 2 / 3 / Zero / Zero 2
+# Match the controller by this label, never by chip index or by a generic
+# "gpio" substring: newer kernels renumber the chips (Pi 5 on 6.12.115: the
+# RP1 header is gpiochip15, the first chips are gpio-brcmstb with base 512),
+# and some kernels print debugfs lines without a "GPIOs <base>-<end>" range.
+#
+# Paths can be overridden (used by the tests).
+GPIO_SYSFS_DIR="${GPIO_SYSFS_DIR:-/sys/class/gpio}"
+GPIO_DEBUGFS="${GPIO_DEBUGFS:-/sys/kernel/debug/gpio}"
+DT_MODEL_FILE="${DT_MODEL_FILE:-/proc/device-tree/model}"
+HEADER_GPIO_LABELS="pinctrl-rp1 pinctrl-bcm2711 pinctrl-bcm2835"
+
 detect_gpio_base() {
-    GPIO_BASE=0
+    # Method 0: explicit override from the environment or board.conf
+    case "${GPIO_BASE:-}" in
+        ''|*[!0-9]*) ;;
+        *)
+            echo "GPIO base $GPIO_BASE from GPIO_BASE override" >&2
+            echo "$GPIO_BASE"
+            return 0
+            ;;
+    esac
 
-    # Method 1: Parse /sys/kernel/debug/gpio (requires root)
-    if [ -r /sys/kernel/debug/gpio ]; then
-        # Extract base from lines like "gpiochip0: GPIOs 512-569" or "GPIOs 571-624"
-        GPIO_BASE=$(grep -m1 'gpiochip0:' /sys/kernel/debug/gpio 2>/dev/null | \
-                    sed -n 's/.*GPIOs \([0-9]*\)-.*/\1/p')
-    fi
+    # Method 1: sysfs chip labels (no root needed)
+    for want in $HEADER_GPIO_LABELS; do
+        for chip in "$GPIO_SYSFS_DIR"/gpiochip*; do
+            [ -f "$chip/label" ] && [ -f "$chip/base" ] || continue
+            if [ "$(cat "$chip/label" 2>/dev/null)" = "$want" ]; then
+                base=$(cat "$chip/base" 2>/dev/null)
+                echo "GPIO base $base from $chip ($want)" >&2
+                echo "$base"
+                return 0
+            fi
+        done
+    done
 
-    # Method 2: Check /sys/class/gpio/gpiochip*/base
-    if [ -z "$GPIO_BASE" ] || [ "$GPIO_BASE" = "0" ]; then
-        for chip in /sys/class/gpio/gpiochip*; do
-            [ -f "$chip/base" ] || continue
-            [ -f "$chip/label" ] || continue
-            label=$(cat "$chip/label" 2>/dev/null)
-            # Look for the main GPIO controller (pinctrl-bcm* or similar)
-            case "$label" in
-                *pinctrl*|*bcm*|*gpio*)
-                    GPIO_BASE=$(cat "$chip/base" 2>/dev/null)
-                    break
-                    ;;
-            esac
+    # Method 2: debugfs lines like
+    #   "gpiochip15: GPIOs 571-624, parent: platform/1f000d0000.gpio, pinctrl-rp1:"
+    # (requires root; lines without a range are skipped)
+    if [ -r "$GPIO_DEBUGFS" ]; then
+        for want in $HEADER_GPIO_LABELS; do
+            base=$(sed -n "s/^gpiochip[0-9]*: GPIOs \([0-9]*\)-[0-9]*,.* $want:.*/\1/p" \
+                   "$GPIO_DEBUGFS" 2>/dev/null | head -n 1)
+            if [ -n "$base" ]; then
+                echo "GPIO base $base from $GPIO_DEBUGFS ($want)" >&2
+                echo "$base"
+                return 0
+            fi
         done
     fi
 
     # Method 3: Fallback - detect by Raspberry Pi model
-    if [ -z "$GPIO_BASE" ] || [ "$GPIO_BASE" = "0" ]; then
-        if [ -f /proc/device-tree/model ]; then
-            model=$(cat /proc/device-tree/model 2>/dev/null)
-            case "$model" in
-                *"Raspberry Pi 5"*)
-                    GPIO_BASE=571
-                    ;;
-                *"Raspberry Pi 4"*|*"Raspberry Pi 3"*|*"Raspberry Pi Compute Module"*)
-                    GPIO_BASE=512
-                    ;;
-                *"Raspberry Pi"*)
-                    # Older models (Pi 1, Pi 2, Pi Zero)
-                    GPIO_BASE=0
-                    ;;
-            esac
-        fi
+    base=0
+    if [ -f "$DT_MODEL_FILE" ]; then
+        model=$(tr -d '\000' < "$DT_MODEL_FILE" 2>/dev/null)
+        case "$model" in
+            *"Raspberry Pi 5"*|*"Raspberry Pi Compute Module 5"*)
+                base=571
+                ;;
+            *"Raspberry Pi 4"*|*"Raspberry Pi 3"*|*"Raspberry Pi Compute Module"*)
+                base=512
+                ;;
+            *"Raspberry Pi"*)
+                # Older models (Pi 1, Pi 2, Pi Zero)
+                base=0
+                ;;
+        esac
     fi
-
-    # Final fallback
-    [ -z "$GPIO_BASE" ] && GPIO_BASE=0
-
-    echo "$GPIO_BASE"
+    echo "GPIO base $base from model fallback" >&2
+    echo "$base"
 }
 
 # =============================================================================
@@ -182,9 +206,10 @@ term() {
 }
 
 case "$1" in
-  start) term; init; reset ;;
-  stop)  reset; term ;;
-  *) echo "Usage: $0 {start|stop}"; exit 1 ;;
+  start)  term; init; reset ;;
+  stop)   reset; term ;;
+  detect) ;;  # only print the detected pin mapping above, touch no GPIO
+  *) echo "Usage: $0 {start|stop|detect}"; exit 1 ;;
 esac
 
 exit 0
